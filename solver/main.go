@@ -305,6 +305,110 @@ OnePossibleTileColumnLoop:
 		}
 	}
 
+	// only-row elimination
+	// see if there is only a single row or column within a region which can hold a value. If so, eliminate neighboring regions from holding that value in the same row.
+
+	// row first
+OnePossibleRowLoop:
+	for v := Tile(1); v < tAny; v = v << 1 {
+		tcRow := uint8(10)
+		for nti, nt := range b[ri] {
+			if nt == v {
+				// this value has already been found
+				continue OnePossibleRowLoop
+			}
+			if nt&v == 0 {
+				// not a possible tile
+				continue
+			}
+			_, y := indicesToXY(ri, uint8(nti))
+			if tcRow == y {
+				// row already a candidate
+				continue
+			}
+			if tcRow != 10 {
+				// multiple candidate rows
+				continue OnePossibleRowLoop
+			}
+			tcRow = y
+		}
+		if tcRow == 10 {
+			// no candidate rows. Wat?
+			*b = b0
+			return 0
+		}
+
+		// iterate over the candidate row, excluding the value from tiles in other regions
+		nrRow := tcRow / 3
+		ntRow := tcRow % 3
+		ntStart := ntRow * 3
+		for i := uint8(0); i < 3; i++ {
+			for j := uint8(0); j < 3; j++ {
+				nri := nrRow*3 + i
+				nti := ntStart + j
+				if nri == ri {
+					// skip our region
+					continue
+				}
+				if b.Set(nri, nti, b[nri][nti]&^v) == 0 {
+					// invalid board configuration, revert the change
+					*b = b0
+					return 0
+				}
+			}
+		}
+	}
+
+OnePossibleColumnLoop:
+	for v := Tile(1); v < tAny; v = v << 1 {
+		tcCol := uint8(10)
+		for nti, nt := range b[ri] {
+			if nt == v {
+				// this value has already been found
+				continue OnePossibleColumnLoop
+			}
+			if nt&v == 0 {
+				// not a possible tile
+				continue
+			}
+			x, _ := indicesToXY(ri, uint8(nti))
+			if tcCol == x {
+				// column already a candidate
+				continue
+			}
+			if tcCol != 10 {
+				// multiple candidate columns
+				continue OnePossibleColumnLoop
+			}
+			tcCol = x
+		}
+		if tcCol == 10 {
+			// no candidate columns. Wat?
+			*b = b0
+			return 0
+		}
+
+		// iterate over the candidate column, excluding the value from tiles in other regions
+		nrCol := tcCol / 3
+		ntCol := tcCol % 3
+		ntStart = ntCol
+		for i := uint8(0); i < 3; i++ {
+			for j := uint8(0); j < 3; j++ {
+				nri := nrCol + i*3
+				nti := ntStart + j*3
+				if nri == ri {
+					// skip our region
+					continue
+				}
+				if b.Set(nri, nti, b[nri][nti]&^v) == 0 {
+					// invalid board configuration, revert the change
+					*b = b0
+					return 0
+				}
+			}
+		}
+	}
+
 	return t
 }
 
