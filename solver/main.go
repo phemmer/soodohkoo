@@ -201,6 +201,110 @@ func (b *Board) Set(ri, ti uint8, t Tile) Tile {
 		}
 	}
 
+	// ok, now scan each set of neighbors for any values which only have one
+	// possible tile
+
+	// iterate over the region
+OnePossibleTileRegionLoop:
+	for v := Tile(1); v < tAny; v = v << 1 {
+		//TODO this feels like there should have an optimized way to find which bits are set in only one of a set of numbers
+		tcTI := uint8(10)
+		for nti, nt := range b[ri] {
+			if nt == v {
+				// this value already has been found
+				continue OnePossibleTileRegionLoop
+			}
+			if nt&v == 0 {
+				// not a possible tile
+				continue
+			}
+			// is a candidate
+			if tcTI != 10 {
+				// this is the second candidate
+				continue OnePossibleTileRegionLoop
+			}
+			tcTI = uint8(nti)
+		}
+		if tcTI == 10 {
+			// no possible tiles for this value
+			//TODO does this ever happen?
+			*b = b0
+			return 0
+		}
+		if b.Set(ri, tcTI, v) == 0 {
+			// invalid board configuration
+			//TODO does this ever happen?
+			*b = b0
+			return 0
+		}
+	}
+
+OnePossibleTileRowLoop:
+	for v := Tile(1); v < tAny; v = v << 1 {
+		tcRI := uint8(10)
+		tcTI := uint8(10)
+		ntStart = ntRow * 3 // was last set by the column iterator
+		for i := uint8(0); i < 3; i++ {
+			for j := uint8(0); j < 3; j++ {
+				nri := nrRow*3 + i // scope these variables (tcRI, tcTI, nri, nti, nt) to the function so we're not constantly redeclaring them
+				nti := ntStart + j // better yet, create a function which gives us something we can range over
+				nt := b[nri][nti]
+				if nt == v {
+					continue OnePossibleTileRowLoop
+				}
+				if nt&v == 0 {
+					continue
+				}
+				if tcTI != 10 {
+					continue OnePossibleTileRowLoop
+				}
+				tcRI = nri
+				tcTI = nti
+			}
+		}
+		if tcTI == 10 {
+			*b = b0
+			return 0
+		}
+		if b.Set(tcRI, tcTI, v) == 0 {
+			*b = b0
+			return 0
+		}
+	}
+
+OnePossibleTileColumnLoop:
+	for v := Tile(1); v < tAny; v = v << 1 {
+		tcRI := uint8(10)
+		tcTI := uint8(10)
+		ntStart = ntCol
+		for i := uint8(0); i < 3; i++ {
+			for j := uint8(0); j < 3; j++ {
+				nri := nrCol + i*3
+				nti := ntStart + j*3
+				nt := b[nri][nti]
+				if nt == v {
+					continue OnePossibleTileColumnLoop
+				}
+				if nt&v == 0 {
+					continue
+				}
+				if tcTI != 10 {
+					continue OnePossibleTileColumnLoop
+				}
+				tcRI = nri
+				tcTI = nti
+			}
+		}
+		if tcTI == 10 {
+			*b = b0
+			return 0
+		}
+		if b.Set(tcRI, tcTI, v) == 0 {
+			*b = b0
+			return 0
+		}
+	}
+
 	return t
 }
 
