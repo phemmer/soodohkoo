@@ -10,6 +10,10 @@ import (
 type Tile uint16 // 9-bit mask of the possible digits
 type Region [9]Tile
 type Board [9]Region
+type TileRef struct {
+	RegionIndex uint8
+	TileIndex   uint8
+}
 
 const tAny = Tile((1 << 9) - 1)
 
@@ -74,38 +78,51 @@ func NewBoard() Board {
 	}
 }
 
-func (b Board) Row(y uint8) [9]Tile {
+func (b *Board) RefRegion(ri uint8) [9]TileRef {
+	return [9]TileRef{
+		{ri, 0},
+		{ri, 1},
+		{ri, 2},
+		{ri, 3},
+		{ri, 4},
+		{ri, 5},
+		{ri, 6},
+		{ri, 7},
+		{ri, 8},
+	}
+}
+func (b *Board) RowRefs(y uint8) [9]TileRef {
 	rRow := y / 3
 	tRow := y % 3
 	tStart := tRow * 3
 
-	return [9]Tile{
-		b[rRow*3+0][tStart+0],
-		b[rRow*3+0][tStart+1],
-		b[rRow*3+0][tStart+2],
-		b[rRow*3+1][tStart+0],
-		b[rRow*3+1][tStart+1],
-		b[rRow*3+1][tStart+2],
-		b[rRow*3+2][tStart+0],
-		b[rRow*3+2][tStart+1],
-		b[rRow*3+2][tStart+2],
+	return [9]TileRef{
+		{rRow*3 + 0, tStart + 0},
+		{rRow*3 + 0, tStart + 1},
+		{rRow*3 + 0, tStart + 2},
+		{rRow*3 + 1, tStart + 0},
+		{rRow*3 + 1, tStart + 1},
+		{rRow*3 + 1, tStart + 2},
+		{rRow*3 + 2, tStart + 0},
+		{rRow*3 + 2, tStart + 1},
+		{rRow*3 + 2, tStart + 2},
 	}
 }
-func (b Board) Column(x uint8) [9]Tile {
+func (b *Board) ColRefs(x uint8) [9]TileRef {
 	rCol := x / 3
 	tCol := x % 3
 	tStart := tCol
 
-	return [9]Tile{
-		b[rCol+0][tStart+0],
-		b[rCol+0][tStart+3],
-		b[rCol+0][tStart+6],
-		b[rCol+3][tStart+0],
-		b[rCol+3][tStart+3],
-		b[rCol+3][tStart+6],
-		b[rCol+6][tStart+0],
-		b[rCol+6][tStart+3],
-		b[rCol+6][tStart+6],
+	return [9]TileRef{
+		{rCol + 0, tStart + 0},
+		{rCol + 0, tStart + 3},
+		{rCol + 0, tStart + 6},
+		{rCol + 3, tStart + 0},
+		{rCol + 3, tStart + 3},
+		{rCol + 3, tStart + 6},
+		{rCol + 6, tStart + 0},
+		{rCol + 6, tStart + 3},
+		{rCol + 6, tStart + 6},
 	}
 }
 
@@ -160,44 +177,32 @@ func (b *Board) Set(ri, ti uint8, t Tile) Tile {
 	}
 
 	x, y := indicesToXY(ri, ti)
+	rowRefs := b.RowRefs(y)
+	colRefs := b.ColRefs(x)
 
-	// iterate over the row (algo from b.Row)
-	nrRow := y / 3
-	ntRow := y % 3
-	ntStart := ntRow * 3
-	for i := uint8(0); i < 3; i++ {
-		for j := uint8(0); j < 3; j++ {
-			nri := nrRow*3 + i
-			nti := ntStart + j
-			if nri == ri && nti == ti {
-				// skip ourself
-				continue
-			}
-			if b.Set(nri, nti, b[nri][nti]&^t) == 0 {
-				// invalid board configuration, revert the change
-				*b = b0
-				return 0
-			}
+	// iterate over the row
+	for _, ntr := range rowRefs {
+		if ntr.RegionIndex == ri && ntr.TileIndex == ti {
+			// skip ourself
+			continue
+		}
+		if b.Set(ntr.RegionIndex, ntr.TileIndex, b[ntr.RegionIndex][ntr.TileIndex]&^t) == 0 {
+			// invalid board configuration, revert the change
+			*b = b0
+			return 0
 		}
 	}
 
-	// iterate over the column (algo from b.Column)
-	nrCol := x / 3
-	ntCol := x % 3
-	ntStart = ntCol
-	for i := uint8(0); i < 3; i++ {
-		for j := uint8(0); j < 3; j++ {
-			nri := nrCol + i*3
-			nti := ntStart + j*3
-			if nri == ri && nti == ti {
-				// skip ourself
-				continue
-			}
-			if b.Set(nri, nti, b[nri][nti]&^t) == 0 {
-				// invalid board configuration, revert the change
-				*b = b0
-				return 0
-			}
+	// iterate over the column
+	for _, ntr := range colRefs {
+		if ntr.RegionIndex == ri && ntr.TileIndex == ti {
+			// skip ourself
+			continue
+		}
+		if b.Set(ntr.RegionIndex, ntr.TileIndex, b[ntr.RegionIndex][ntr.TileIndex]&^t) == 0 {
+			// invalid board configuration, revert the change
+			*b = b0
+			return 0
 		}
 	}
 
@@ -241,32 +246,25 @@ OnePossibleTileRegionLoop:
 
 OnePossibleTileRowLoop:
 	for v := Tile(1); v < tAny; v = v << 1 {
-		tcRI := uint8(10)
-		tcTI := uint8(10)
-		ntStart = ntRow * 3 // was last set by the column iterator
-		for i := uint8(0); i < 3; i++ {
-			for j := uint8(0); j < 3; j++ {
-				nri := nrRow*3 + i // scope these variables (tcRI, tcTI, nri, nti, nt) to the function so we're not constantly redeclaring them
-				nti := ntStart + j // better yet, create a function which gives us something we can range over
-				nt := b[nri][nti]
-				if nt == v {
-					continue OnePossibleTileRowLoop
-				}
-				if nt&v == 0 {
-					continue
-				}
-				if tcTI != 10 {
-					continue OnePossibleTileRowLoop
-				}
-				tcRI = nri
-				tcTI = nti
+		var tcRef TileRef
+		for _, ntr := range rowRefs {
+			nt := b[ntr.RegionIndex][ntr.TileIndex]
+			if nt == v {
+				continue OnePossibleTileRowLoop
 			}
+			if nt&v == 0 {
+				continue
+			}
+			if tcRef != (TileRef{}) {
+				continue OnePossibleTileRowLoop
+			}
+			tcRef = ntr
 		}
-		if tcTI == 10 {
+		if tcRef == (TileRef{}) {
 			*b = b0
 			return 0
 		}
-		if b.Set(tcRI, tcTI, v) == 0 {
+		if b.Set(tcRef.RegionIndex, tcRef.TileIndex, v) == 0 {
 			*b = b0
 			return 0
 		}
@@ -274,32 +272,25 @@ OnePossibleTileRowLoop:
 
 OnePossibleTileColumnLoop:
 	for v := Tile(1); v < tAny; v = v << 1 {
-		tcRI := uint8(10)
-		tcTI := uint8(10)
-		ntStart = ntCol
-		for i := uint8(0); i < 3; i++ {
-			for j := uint8(0); j < 3; j++ {
-				nri := nrCol + i*3
-				nti := ntStart + j*3
-				nt := b[nri][nti]
-				if nt == v {
-					continue OnePossibleTileColumnLoop
-				}
-				if nt&v == 0 {
-					continue
-				}
-				if tcTI != 10 {
-					continue OnePossibleTileColumnLoop
-				}
-				tcRI = nri
-				tcTI = nti
+		var tcRef TileRef
+		for _, ntr := range colRefs {
+			nt := b[ntr.RegionIndex][ntr.TileIndex]
+			if nt == v {
+				continue OnePossibleTileColumnLoop
 			}
+			if nt&v == 0 {
+				continue
+			}
+			if tcRef != (TileRef{}) {
+				continue OnePossibleTileColumnLoop
+			}
+			tcRef = ntr
 		}
-		if tcTI == 10 {
+		if tcRef == (TileRef{}) {
 			*b = b0
 			return 0
 		}
-		if b.Set(tcRI, tcTI, v) == 0 {
+		if b.Set(tcRef.RegionIndex, tcRef.TileIndex, v) == 0 {
 			*b = b0
 			return 0
 		}
@@ -339,22 +330,16 @@ OnePossibleRowLoop:
 		}
 
 		// iterate over the candidate row, excluding the value from tiles in other regions
-		nrRow := tcRow / 3
-		ntRow := tcRow % 3
-		ntStart := ntRow * 3
-		for i := uint8(0); i < 3; i++ {
-			for j := uint8(0); j < 3; j++ {
-				nri := nrRow*3 + i
-				nti := ntStart + j
-				if nri == ri {
-					// skip our region
-					continue
-				}
-				if b.Set(nri, nti, b[nri][nti]&^v) == 0 {
-					// invalid board configuration, revert the change
-					*b = b0
-					return 0
-				}
+		tcRowRef := b.RowRefs(tcRow)
+		for _, ntr := range tcRowRef {
+			if ntr.RegionIndex == ri {
+				// skip our region
+				continue
+			}
+			if b.Set(ntr.RegionIndex, ntr.TileIndex, b[ntr.RegionIndex][ntr.TileIndex]&^v) == 0 {
+				// invalid board configuration, revert the change
+				*b = b0
+				return 0
 			}
 		}
 	}
@@ -388,23 +373,16 @@ OnePossibleColumnLoop:
 			return 0
 		}
 
-		// iterate over the candidate column, excluding the value from tiles in other regions
-		nrCol := tcCol / 3
-		ntCol := tcCol % 3
-		ntStart = ntCol
-		for i := uint8(0); i < 3; i++ {
-			for j := uint8(0); j < 3; j++ {
-				nri := nrCol + i*3
-				nti := ntStart + j*3
-				if nri == ri {
-					// skip our region
-					continue
-				}
-				if b.Set(nri, nti, b[nri][nti]&^v) == 0 {
-					// invalid board configuration, revert the change
-					*b = b0
-					return 0
-				}
+		tcColRef := b.ColRefs(tcCol)
+		for _, ntr := range tcColRef {
+			if ntr.RegionIndex == ri {
+				// skip our region
+				continue
+			}
+			if b.Set(ntr.RegionIndex, ntr.TileIndex, b[ntr.RegionIndex][ntr.TileIndex]&^v) == 0 {
+				// invalid board configuration, revert the change
+				*b = b0
+				return 0
 			}
 		}
 	}
@@ -438,7 +416,8 @@ func (b Board) Art() [9 * 9 * 2]byte {
 	var ba [9 * 9 * 2]byte
 	for y := uint8(0); y < 9; y++ {
 		rowStart := y * 9 * 2
-		for x, t := range b.Row(y) {
+		for x, tr := range b.RowRefs(y) {
+			t := b[tr.RegionIndex][tr.TileIndex]
 			i := rowStart + uint8(x)*2
 			ba[i] = '0' + t.Num()
 			if ba[i] == '0' {
