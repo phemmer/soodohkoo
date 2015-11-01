@@ -131,30 +131,31 @@ func NewBoard() Board {
 // Set tries to set the given indices to the given Tile.
 // The tile set on the board might be different than the one provided if
 // possiblities can be eliminated.
-// Returns the tile actually set, and 0 if not possible.
-func (b *Board) Set(ti uint8, t Tile) Tile {
+// Returns whether the operation was successful or not. The operation will be
+// unsuccessful if the value results in an invalid board.
+func (b *Board) Set(ti uint8, t Tile) bool {
 	b0 := *b
 
-	t = b.set(ti, t)
-	if t == 0 {
+	if !b.set(ti, t) {
 		*b = b0
+		return false
 	}
-	return t
+	return true
 }
 
-func (b *Board) set(ti uint8, t Tile) Tile {
+func (b *Board) set(ti uint8, t Tile) bool {
 	t0 := b[ti]
 
 	// discard possible values based on the current tile mask
 	t &= t0
 	if t == 0 {
 		// not possible captain
-		return t
+		return false
 	}
 
 	if t == t0 {
 		// no change
-		return t
+		return true
 	}
 
 	b[ti] = t
@@ -162,7 +163,7 @@ func (b *Board) set(ti uint8, t Tile) Tile {
 	if !t.isKnown() {
 		// it has multiple possible values, so we can't eliminated possiblities
 		// from our neighbors
-		return t
+		return true
 	}
 	// ok, it has only a single possible value, so remove the value from
 	// neighbors possiblities
@@ -178,9 +179,9 @@ func (b *Board) set(ti uint8, t Tile) Tile {
 			// skip ourself
 			continue
 		}
-		if b.set(nti, b[nti]&^t) == 0 {
+		if !b.set(nti, b[nti]&^t) {
 			// invalid board configuration
-			return 0
+			return false
 		}
 	}
 
@@ -192,9 +193,9 @@ func (b *Board) set(ti uint8, t Tile) Tile {
 			// skip ourself
 			continue
 		}
-		if b.set(nti, b[nti]&^t) == 0 {
+		if !b.set(nti, b[nti]&^t) {
 			// invalid board configuration
-			return 0
+			return false
 		}
 	}
 
@@ -206,9 +207,9 @@ func (b *Board) set(ti uint8, t Tile) Tile {
 			// skip ourself
 			continue
 		}
-		if b.set(nti, b[nti]&^t) == 0 {
+		if !b.set(nti, b[nti]&^t) {
 			// invalid board configuration
-			return 0
+			return false
 		}
 	}
 
@@ -240,12 +241,12 @@ OnePossibleTileRegionLoop:
 		if tcIdx == 255 {
 			// no possible tiles for this value
 			//TODO does this ever happen?
-			return 0
+			return false
 		}
-		if b.set(tcIdx, v) == 0 {
+		if !b.set(tcIdx, v) {
 			// invalid board configuration
 			//TODO does this ever happen?
-			return 0
+			return false
 		}
 	}
 
@@ -266,10 +267,10 @@ OnePossibleTileRowLoop:
 			tcIdx = nti
 		}
 		if tcIdx == 255 {
-			return 0
+			return false
 		}
-		if b.set(tcIdx, v) == 0 {
-			return 0
+		if !b.set(tcIdx, v) {
+			return false
 		}
 	}
 
@@ -290,10 +291,10 @@ OnePossibleTileColumnLoop:
 			tcIdx = nti
 		}
 		if tcIdx == 255 {
-			return 0
+			return false
 		}
-		if b.set(tcIdx, v) == 0 {
-			return 0
+		if !b.set(tcIdx, v) {
+			return false
 		}
 	}
 
@@ -327,7 +328,7 @@ OnePossibleRowLoop:
 		}
 		if tcRow == 255 {
 			// no candidate rows. Wat?
-			return 0
+			return false
 		}
 
 		// iterate over the candidate row, excluding the value from tiles in other regions
@@ -336,9 +337,9 @@ OnePossibleRowLoop:
 				// skip our region
 				continue
 			}
-			if b.set(nti, b[nti]&^v) == 0 {
+			if !b.set(nti, b[nti]&^v) {
 				// invalid board configuration
-				return 0
+				return false
 			}
 		}
 	}
@@ -369,7 +370,7 @@ OnePossibleColumnLoop:
 		}
 		if tcCol == 255 {
 			// no candidate columns. Wat?
-			return 0
+			return false
 		}
 
 		for _, nti := range ColumnIndices[tcCol][:] {
@@ -377,14 +378,14 @@ OnePossibleColumnLoop:
 				// skip our region
 				continue
 			}
-			if b.set(nti, b[nti]&^v) == 0 {
+			if !b.set(nti, b[nti]&^v) {
 				// invalid board configuration
-				return 0
+				return false
 			}
 		}
 	}
 
-	return t
+	return true
 }
 
 func (b *Board) ReadFrom(r io.Reader) (int64, error) {
@@ -402,7 +403,7 @@ func (b *Board) ReadFrom(r io.Reader) (int64, error) {
 		if t == 0 {
 			return int64(nr), errors.New("invalid byte")
 		}
-		if b.Set(ti, t) == 0 {
+		if !b.Set(ti, t) {
 			return int64(nr), fmt.Errorf("invalid board (offset=%d byte=%q)", i, []byte{ba[i]})
 		}
 		//b[ri][ti] = byteToTileMap[ba[i]]
