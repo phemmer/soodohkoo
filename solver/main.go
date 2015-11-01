@@ -124,6 +124,16 @@ func NewBoard() Board {
 // possiblities can be eliminated.
 // Returns the tile actually set, and 0 if not possible.
 func (b *Board) Set(ti uint8, t Tile) Tile {
+	b0 := *b
+
+	t = b.set(ti, t)
+	if t == 0 {
+		*b = b0
+	}
+	return t
+}
+
+func (b *Board) set(ti uint8, t Tile) Tile {
 	t0 := b[ti]
 	if t == t0 {
 		// already set
@@ -147,14 +157,6 @@ func (b *Board) Set(ti uint8, t Tile) Tile {
 	// ok, it has only a single possible value, so remove the value from
 	// neighbors possiblities
 
-	// back up the entire board. The other option is to maintain a list of
-	// neighbor changes.
-	// We also do this after the !t.isKnown() check above as the board is somewhat
-	// large, and the !t.isKnown() check is likely to prevent us from getting
-	// here.
-	b0 := *b
-	b0[ti] = t0
-
 	x, y := indexToXY(ti)
 	rgnIdx := indexToRegionIndex(ti)
 
@@ -166,9 +168,8 @@ func (b *Board) Set(ti uint8, t Tile) Tile {
 			// skip ourself
 			continue
 		}
-		if b.Set(nti, b[nti]&^t) == 0 {
-			// invalid board configuration, revert the change
-			*b = b0
+		if b.set(nti, b[nti]&^t) == 0 {
+			// invalid board configuration
 			return 0
 		}
 	}
@@ -181,9 +182,8 @@ func (b *Board) Set(ti uint8, t Tile) Tile {
 			// skip ourself
 			continue
 		}
-		if b.Set(nti, b[nti]&^t) == 0 {
-			// invalid board configuration, revert the change
-			*b = b0
+		if b.set(nti, b[nti]&^t) == 0 {
+			// invalid board configuration
 			return 0
 		}
 	}
@@ -196,9 +196,8 @@ func (b *Board) Set(ti uint8, t Tile) Tile {
 			// skip ourself
 			continue
 		}
-		if b.Set(nti, b[nti]&^t) == 0 {
-			// invalid board configuration, revert the change
-			*b = b0
+		if b.set(nti, b[nti]&^t) == 0 {
+			// invalid board configuration
 			return 0
 		}
 	}
@@ -231,13 +230,11 @@ OnePossibleTileRegionLoop:
 		if tcIdx == 255 {
 			// no possible tiles for this value
 			//TODO does this ever happen?
-			*b = b0
 			return 0
 		}
-		if b.Set(tcIdx, v) == 0 {
+		if b.set(tcIdx, v) == 0 {
 			// invalid board configuration
 			//TODO does this ever happen?
-			*b = b0
 			return 0
 		}
 	}
@@ -259,11 +256,9 @@ OnePossibleTileRowLoop:
 			tcIdx = nti
 		}
 		if tcIdx == 255 {
-			*b = b0
 			return 0
 		}
-		if b.Set(tcIdx, v) == 0 {
-			*b = b0
+		if b.set(tcIdx, v) == 0 {
 			return 0
 		}
 	}
@@ -285,11 +280,9 @@ OnePossibleTileColumnLoop:
 			tcIdx = nti
 		}
 		if tcIdx == 255 {
-			*b = b0
 			return 0
 		}
-		if b.Set(tcIdx, v) == 0 {
-			*b = b0
+		if b.set(tcIdx, v) == 0 {
 			return 0
 		}
 	}
@@ -324,7 +317,6 @@ OnePossibleRowLoop:
 		}
 		if tcRow == 255 {
 			// no candidate rows. Wat?
-			*b = b0
 			return 0
 		}
 
@@ -334,9 +326,8 @@ OnePossibleRowLoop:
 				// skip our region
 				continue
 			}
-			if b.Set(nti, b[nti]&^v) == 0 {
-				// invalid board configuration, revert the change
-				*b = b0
+			if b.set(nti, b[nti]&^v) == 0 {
+				// invalid board configuration
 				return 0
 			}
 		}
@@ -368,7 +359,6 @@ OnePossibleColumnLoop:
 		}
 		if tcCol == 255 {
 			// no candidate columns. Wat?
-			*b = b0
 			return 0
 		}
 
@@ -377,9 +367,8 @@ OnePossibleColumnLoop:
 				// skip our region
 				continue
 			}
-			if b.Set(nti, b[nti]&^v) == 0 {
-				// invalid board configuration, revert the change
-				*b = b0
+			if b.set(nti, b[nti]&^v) == 0 {
+				// invalid board configuration
 				return 0
 			}
 		}
