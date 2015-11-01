@@ -135,15 +135,16 @@ func (b *Board) Set(ti uint8, t Tile) Tile {
 
 func (b *Board) set(ti uint8, t Tile) Tile {
 	t0 := b[ti]
-	if t == t0 {
-		// already set
-		return t
-	}
 
 	// discard possible values based on the current tile mask
 	t &= t0
 	if t == 0 {
 		// not possible captain
+		return t
+	}
+
+	if t == t0 {
+		// no change
 		return t
 	}
 
