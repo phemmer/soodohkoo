@@ -61,49 +61,58 @@ func indexToRegionIndex(idx uint8) uint8 {
 	return idx/3%3 + idx/(9*3)*3
 }
 
-func RegionIndices(ri uint8) [9]uint8 {
-	idx0 := (ri / 3 * 27) + (ri % 3 * 3)
-	return [9]uint8{
-		idx0 + 9*0 + 0,
-		idx0 + 9*0 + 1,
-		idx0 + 9*0 + 2,
-		idx0 + 9*1 + 0,
-		idx0 + 9*1 + 1,
-		idx0 + 9*1 + 2,
-		idx0 + 9*2 + 0,
-		idx0 + 9*2 + 1,
-		idx0 + 9*2 + 2,
+var RegionIndices [9][9]uint8 = func() (idcs [9][9]uint8) {
+	for ri := range idcs {
+		idx0 := uint8((ri / 3 * 27) + (ri % 3 * 3))
+		idcs[ri] = [9]uint8{
+			idx0 + 9*0 + 0,
+			idx0 + 9*0 + 1,
+			idx0 + 9*0 + 2,
+			idx0 + 9*1 + 0,
+			idx0 + 9*1 + 1,
+			idx0 + 9*1 + 2,
+			idx0 + 9*2 + 0,
+			idx0 + 9*2 + 1,
+			idx0 + 9*2 + 2,
+		}
 	}
-}
+	return
+}()
 
-func RowIndices(y uint8) [9]uint8 {
-	idx0 := y * 9
-	return [9]uint8{
-		idx0 + 0,
-		idx0 + 1,
-		idx0 + 2,
-		idx0 + 3,
-		idx0 + 4,
-		idx0 + 5,
-		idx0 + 6,
-		idx0 + 7,
-		idx0 + 8,
+var RowIndices [9][9]uint8 = func() (idcs [9][9]uint8) {
+	for y := range idcs {
+		idx0 := uint8(y * 9)
+		idcs[y] = [9]uint8{
+			idx0 + 0,
+			idx0 + 1,
+			idx0 + 2,
+			idx0 + 3,
+			idx0 + 4,
+			idx0 + 5,
+			idx0 + 6,
+			idx0 + 7,
+			idx0 + 8,
+		}
 	}
-}
+	return
+}()
 
-func ColumnIndices(x uint8) [9]uint8 {
-	return [9]uint8{
-		x + 9*0,
-		x + 9*1,
-		x + 9*2,
-		x + 9*3,
-		x + 9*4,
-		x + 9*5,
-		x + 9*6,
-		x + 9*7,
-		x + 9*8,
+var ColumnIndices [9][9]uint8 = func() (idcs [9][9]uint8) {
+	for x := range idcs {
+		idcs[x] = [9]uint8{
+			uint8(x) + 9*0,
+			uint8(x) + 9*1,
+			uint8(x) + 9*2,
+			uint8(x) + 9*3,
+			uint8(x) + 9*4,
+			uint8(x) + 9*5,
+			uint8(x) + 9*6,
+			uint8(x) + 9*7,
+			uint8(x) + 9*8,
+		}
 	}
-}
+	return
+}()
 
 func NewBoard() Board {
 	return Board{
@@ -161,7 +170,7 @@ func (b *Board) set(ti uint8, t Tile) Tile {
 	x, y := indexToXY(ti)
 	rgnIdx := indexToRegionIndex(ti)
 
-	rgnIndices := RegionIndices(rgnIdx)
+	rgnIndices := RegionIndices[rgnIdx][:]
 
 	// iterate over the region
 	for _, nti := range rgnIndices[:] {
@@ -175,10 +184,10 @@ func (b *Board) set(ti uint8, t Tile) Tile {
 		}
 	}
 
-	rowIndices := RowIndices(y)
+	rowIndices := RowIndices[y][:]
 
 	// iterate over the row
-	for _, nti := range rowIndices[:] {
+	for _, nti := range rowIndices {
 		if nti == ti {
 			// skip ourself
 			continue
@@ -189,10 +198,10 @@ func (b *Board) set(ti uint8, t Tile) Tile {
 		}
 	}
 
-	colIndices := ColumnIndices(x)
+	colIndices := ColumnIndices[x][:]
 
 	// iterate over the column
-	for _, nti := range colIndices[:] {
+	for _, nti := range colIndices {
 		if nti == ti {
 			// skip ourself
 			continue
@@ -211,7 +220,7 @@ OnePossibleTileRegionLoop:
 	for v := Tile(1); v < tAny; v = v << 1 {
 		//TODO this feels like there should have an optimized way to find which bits are set in only one of a set of numbers
 		tcIdx := uint8(255)
-		for _, nti := range rgnIndices[:] {
+		for _, nti := range rgnIndices {
 			nt := b[nti]
 			if nt == v {
 				// this value already has been found
@@ -243,7 +252,7 @@ OnePossibleTileRegionLoop:
 OnePossibleTileRowLoop:
 	for v := Tile(1); v < tAny; v = v << 1 {
 		tcIdx := uint8(255)
-		for _, nti := range rowIndices[:] {
+		for _, nti := range rowIndices {
 			nt := b[nti]
 			if nt == v {
 				continue OnePossibleTileRowLoop
@@ -267,7 +276,7 @@ OnePossibleTileRowLoop:
 OnePossibleTileColumnLoop:
 	for v := Tile(1); v < tAny; v = v << 1 {
 		tcIdx := uint8(255)
-		for _, nti := range colIndices[:] {
+		for _, nti := range colIndices {
 			nt := b[nti]
 			if nt == v {
 				continue OnePossibleTileColumnLoop
@@ -295,7 +304,7 @@ OnePossibleTileColumnLoop:
 OnePossibleRowLoop:
 	for v := Tile(1); v < tAny; v = v << 1 {
 		tcRow := uint8(255)
-		for _, nti := range rgnIndices[:] {
+		for _, nti := range rgnIndices {
 			nt := b[nti]
 			if nt == v {
 				// this value has already been found
@@ -322,7 +331,7 @@ OnePossibleRowLoop:
 		}
 
 		// iterate over the candidate row, excluding the value from tiles in other regions
-		for _, nti := range RowIndices(tcRow) {
+		for _, nti := range RowIndices[tcRow][:] {
 			if indexToRegionIndex(nti) == rgnIdx {
 				// skip our region
 				continue
@@ -337,7 +346,7 @@ OnePossibleRowLoop:
 OnePossibleColumnLoop:
 	for v := Tile(1); v < tAny; v = v << 1 {
 		tcCol := uint8(255)
-		for _, nti := range rgnIndices[:] {
+		for _, nti := range rgnIndices {
 			nt := b[nti]
 			if nt == v {
 				// this value has already been found
@@ -363,7 +372,7 @@ OnePossibleColumnLoop:
 			return 0
 		}
 
-		for _, nti := range ColumnIndices(tcCol) {
+		for _, nti := range ColumnIndices[tcCol][:] {
 			if indexToRegionIndex(nti) == rgnIdx {
 				// skip our region
 				continue
@@ -406,7 +415,7 @@ func (b Board) Art() [9 * 9 * 2]byte {
 	var ba [9 * 9 * 2]byte
 	for y := uint8(0); y < 9; y++ {
 		rowStart := y * 9 * 2
-		for x, ti := range RowIndices(y) {
+		for x, ti := range RowIndices[y][:] {
 			t := b[ti]
 			i := rowStart + uint8(x)*2
 			ba[i] = '0' + t.Num()
