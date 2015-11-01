@@ -8,12 +8,7 @@ import (
 )
 
 type Tile uint16 // 9-bit mask of the possible digits
-type Region [9]Tile
-type Board [9]Region
-type TileRef struct {
-	RegionIndex uint8
-	TileIndex   uint8
-}
+type Board [9 * 9]Tile
 
 const tAny = Tile((1 << 9) - 1)
 
@@ -51,78 +46,76 @@ func (t Tile) Num() uint8 {
 	return lookupTable[(uint32(t<<1)*0x077CB531)>>27]
 }
 
-// converts board x,y coordinates into a region & tile index
-func xyToIndices(x, y uint8) (ri, ti uint8) {
-	ri = (y/3)*3 + x/3
-	ti = (y%3)*3 + x%3
-	return
+// converts board x,y coordinates into an index
+func xyToIndex(x, y uint8) (idx uint8) {
+	return y*9 + x
 }
 
-func indicesToXY(ri, ti uint8) (x, y uint8) {
-	x = (ri%3)*3 + ti%3
-	y = (ri/3)*3 + ti/3
-	return
+func indexToXY(idx uint8) (x, y uint8) {
+	return idx % 9, idx / 9
+}
+
+//TODO bench indexToX/indexToY
+
+func indexToRegionIndex(idx uint8) uint8 {
+	return idx/3%3 + idx/(9*3)*3
+}
+
+func RegionIndices(ri uint8) [9]uint8 {
+	idx0 := (ri / 3 * 27) + (ri % 3 * 3)
+	return [9]uint8{
+		idx0 + 9*0 + 0,
+		idx0 + 9*0 + 1,
+		idx0 + 9*0 + 2,
+		idx0 + 9*1 + 0,
+		idx0 + 9*1 + 1,
+		idx0 + 9*1 + 2,
+		idx0 + 9*2 + 0,
+		idx0 + 9*2 + 1,
+		idx0 + 9*2 + 2,
+	}
+}
+
+func RowIndices(y uint8) [9]uint8 {
+	idx0 := y * 9
+	return [9]uint8{
+		idx0 + 0,
+		idx0 + 1,
+		idx0 + 2,
+		idx0 + 3,
+		idx0 + 4,
+		idx0 + 5,
+		idx0 + 6,
+		idx0 + 7,
+		idx0 + 8,
+	}
+}
+
+func ColumnIndices(x uint8) [9]uint8 {
+	return [9]uint8{
+		x + 9*0,
+		x + 9*1,
+		x + 9*2,
+		x + 9*3,
+		x + 9*4,
+		x + 9*5,
+		x + 9*6,
+		x + 9*7,
+		x + 9*8,
+	}
 }
 
 func NewBoard() Board {
 	return Board{
-		Region{tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny},
-		Region{tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny},
-		Region{tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny},
-		Region{tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny},
-		Region{tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny},
-		Region{tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny},
-		Region{tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny},
-		Region{tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny},
-		Region{tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny},
-	}
-}
-
-func (b *Board) RefRegion(ri uint8) [9]TileRef {
-	return [9]TileRef{
-		{ri, 0},
-		{ri, 1},
-		{ri, 2},
-		{ri, 3},
-		{ri, 4},
-		{ri, 5},
-		{ri, 6},
-		{ri, 7},
-		{ri, 8},
-	}
-}
-func (b *Board) RowRefs(y uint8) [9]TileRef {
-	rRow := y / 3
-	tRow := y % 3
-	tStart := tRow * 3
-
-	return [9]TileRef{
-		{rRow*3 + 0, tStart + 0},
-		{rRow*3 + 0, tStart + 1},
-		{rRow*3 + 0, tStart + 2},
-		{rRow*3 + 1, tStart + 0},
-		{rRow*3 + 1, tStart + 1},
-		{rRow*3 + 1, tStart + 2},
-		{rRow*3 + 2, tStart + 0},
-		{rRow*3 + 2, tStart + 1},
-		{rRow*3 + 2, tStart + 2},
-	}
-}
-func (b *Board) ColRefs(x uint8) [9]TileRef {
-	rCol := x / 3
-	tCol := x % 3
-	tStart := tCol
-
-	return [9]TileRef{
-		{rCol + 0, tStart + 0},
-		{rCol + 0, tStart + 3},
-		{rCol + 0, tStart + 6},
-		{rCol + 3, tStart + 0},
-		{rCol + 3, tStart + 3},
-		{rCol + 3, tStart + 6},
-		{rCol + 6, tStart + 0},
-		{rCol + 6, tStart + 3},
-		{rCol + 6, tStart + 6},
+		tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
+		tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
+		tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
+		tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
+		tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
+		tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
+		tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
+		tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
+		tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
 	}
 }
 
@@ -130,8 +123,8 @@ func (b *Board) ColRefs(x uint8) [9]TileRef {
 // The tile set on the board might be different than the one provided if
 // possiblities can be eliminated.
 // Returns the tile actually set, and 0 if not possible.
-func (b *Board) Set(ri, ti uint8, t Tile) Tile {
-	t0 := b[ri][ti]
+func (b *Board) Set(ti uint8, t Tile) Tile {
+	t0 := b[ti]
 	if t == t0 {
 		// already set
 		return t
@@ -144,7 +137,7 @@ func (b *Board) Set(ri, ti uint8, t Tile) Tile {
 		return t
 	}
 
-	b[ri][ti] = t
+	b[ti] = t
 
 	if !t.isKnown() {
 		// it has multiple possible values, so we can't eliminated possiblities
@@ -160,46 +153,50 @@ func (b *Board) Set(ri, ti uint8, t Tile) Tile {
 	// large, and the !t.isKnown() check is likely to prevent us from getting
 	// here.
 	b0 := *b
-	b0[ri][ti] = t0
+	b0[ti] = t0
+
+	x, y := indexToXY(ti)
+	rgnIdx := indexToRegionIndex(ti)
+
+	rgnIndices := RegionIndices(rgnIdx)
 
 	// iterate over the region
-	for nti := range b[ri] {
-		if uint8(nti) == ti {
+	for _, nti := range rgnIndices[:] {
+		if nti == ti {
 			// skip ourself
 			continue
 		}
-		nt := b[ri][nti]
-		if b.Set(ri, uint8(nti), nt&^t) == 0 {
+		if b.Set(nti, b[nti]&^t) == 0 {
 			// invalid board configuration, revert the change
 			*b = b0
 			return 0
 		}
 	}
 
-	x, y := indicesToXY(ri, ti)
-	rowRefs := b.RowRefs(y)
-	colRefs := b.ColRefs(x)
+	rowIndices := RowIndices(y)
 
 	// iterate over the row
-	for _, ntr := range rowRefs {
-		if ntr.RegionIndex == ri && ntr.TileIndex == ti {
+	for _, nti := range rowIndices[:] {
+		if nti == ti {
 			// skip ourself
 			continue
 		}
-		if b.Set(ntr.RegionIndex, ntr.TileIndex, b[ntr.RegionIndex][ntr.TileIndex]&^t) == 0 {
+		if b.Set(nti, b[nti]&^t) == 0 {
 			// invalid board configuration, revert the change
 			*b = b0
 			return 0
 		}
 	}
 
+	colIndices := ColumnIndices(x)
+
 	// iterate over the column
-	for _, ntr := range colRefs {
-		if ntr.RegionIndex == ri && ntr.TileIndex == ti {
+	for _, nti := range colIndices[:] {
+		if nti == ti {
 			// skip ourself
 			continue
 		}
-		if b.Set(ntr.RegionIndex, ntr.TileIndex, b[ntr.RegionIndex][ntr.TileIndex]&^t) == 0 {
+		if b.Set(nti, b[nti]&^t) == 0 {
 			// invalid board configuration, revert the change
 			*b = b0
 			return 0
@@ -213,8 +210,9 @@ func (b *Board) Set(ri, ti uint8, t Tile) Tile {
 OnePossibleTileRegionLoop:
 	for v := Tile(1); v < tAny; v = v << 1 {
 		//TODO this feels like there should have an optimized way to find which bits are set in only one of a set of numbers
-		tcTI := uint8(10)
-		for nti, nt := range b[ri] {
+		tcIdx := uint8(255)
+		for _, nti := range rgnIndices[:] {
+			nt := b[nti]
 			if nt == v {
 				// this value already has been found
 				continue OnePossibleTileRegionLoop
@@ -224,19 +222,19 @@ OnePossibleTileRegionLoop:
 				continue
 			}
 			// is a candidate
-			if tcTI != 10 {
+			if tcIdx != 255 {
 				// this is the second candidate
 				continue OnePossibleTileRegionLoop
 			}
-			tcTI = uint8(nti)
+			tcIdx = nti
 		}
-		if tcTI == 10 {
+		if tcIdx == 255 {
 			// no possible tiles for this value
 			//TODO does this ever happen?
 			*b = b0
 			return 0
 		}
-		if b.Set(ri, tcTI, v) == 0 {
+		if b.Set(tcIdx, v) == 0 {
 			// invalid board configuration
 			//TODO does this ever happen?
 			*b = b0
@@ -246,25 +244,25 @@ OnePossibleTileRegionLoop:
 
 OnePossibleTileRowLoop:
 	for v := Tile(1); v < tAny; v = v << 1 {
-		var tcRef TileRef
-		for _, ntr := range rowRefs {
-			nt := b[ntr.RegionIndex][ntr.TileIndex]
+		tcIdx := uint8(255)
+		for _, nti := range rowIndices[:] {
+			nt := b[nti]
 			if nt == v {
 				continue OnePossibleTileRowLoop
 			}
 			if nt&v == 0 {
 				continue
 			}
-			if tcRef != (TileRef{}) {
+			if tcIdx != 255 {
 				continue OnePossibleTileRowLoop
 			}
-			tcRef = ntr
+			tcIdx = nti
 		}
-		if tcRef == (TileRef{}) {
+		if tcIdx == 255 {
 			*b = b0
 			return 0
 		}
-		if b.Set(tcRef.RegionIndex, tcRef.TileIndex, v) == 0 {
+		if b.Set(tcIdx, v) == 0 {
 			*b = b0
 			return 0
 		}
@@ -272,25 +270,25 @@ OnePossibleTileRowLoop:
 
 OnePossibleTileColumnLoop:
 	for v := Tile(1); v < tAny; v = v << 1 {
-		var tcRef TileRef
-		for _, ntr := range colRefs {
-			nt := b[ntr.RegionIndex][ntr.TileIndex]
+		tcIdx := uint8(255)
+		for _, nti := range colIndices[:] {
+			nt := b[nti]
 			if nt == v {
 				continue OnePossibleTileColumnLoop
 			}
 			if nt&v == 0 {
 				continue
 			}
-			if tcRef != (TileRef{}) {
+			if tcIdx != 255 {
 				continue OnePossibleTileColumnLoop
 			}
-			tcRef = ntr
+			tcIdx = nti
 		}
-		if tcRef == (TileRef{}) {
+		if tcIdx == 255 {
 			*b = b0
 			return 0
 		}
-		if b.Set(tcRef.RegionIndex, tcRef.TileIndex, v) == 0 {
+		if b.Set(tcIdx, v) == 0 {
 			*b = b0
 			return 0
 		}
@@ -302,8 +300,9 @@ OnePossibleTileColumnLoop:
 	// row first
 OnePossibleRowLoop:
 	for v := Tile(1); v < tAny; v = v << 1 {
-		tcRow := uint8(10)
-		for nti, nt := range b[ri] {
+		tcRow := uint8(255)
+		for _, nti := range rgnIndices[:] {
+			nt := b[nti]
 			if nt == v {
 				// this value has already been found
 				continue OnePossibleRowLoop
@@ -312,31 +311,30 @@ OnePossibleRowLoop:
 				// not a possible tile
 				continue
 			}
-			_, y := indicesToXY(ri, uint8(nti))
+			_, y := indexToXY(nti)
 			if tcRow == y {
 				// row already a candidate
 				continue
 			}
-			if tcRow != 10 {
+			if tcRow != 255 {
 				// multiple candidate rows
 				continue OnePossibleRowLoop
 			}
 			tcRow = y
 		}
-		if tcRow == 10 {
+		if tcRow == 255 {
 			// no candidate rows. Wat?
 			*b = b0
 			return 0
 		}
 
 		// iterate over the candidate row, excluding the value from tiles in other regions
-		tcRowRef := b.RowRefs(tcRow)
-		for _, ntr := range tcRowRef {
-			if ntr.RegionIndex == ri {
+		for _, nti := range RowIndices(tcRow) {
+			if indexToRegionIndex(nti) == rgnIdx {
 				// skip our region
 				continue
 			}
-			if b.Set(ntr.RegionIndex, ntr.TileIndex, b[ntr.RegionIndex][ntr.TileIndex]&^v) == 0 {
+			if b.Set(nti, b[nti]&^v) == 0 {
 				// invalid board configuration, revert the change
 				*b = b0
 				return 0
@@ -346,8 +344,9 @@ OnePossibleRowLoop:
 
 OnePossibleColumnLoop:
 	for v := Tile(1); v < tAny; v = v << 1 {
-		tcCol := uint8(10)
-		for nti, nt := range b[ri] {
+		tcCol := uint8(255)
+		for _, nti := range rgnIndices[:] {
+			nt := b[nti]
 			if nt == v {
 				// this value has already been found
 				continue OnePossibleColumnLoop
@@ -356,30 +355,29 @@ OnePossibleColumnLoop:
 				// not a possible tile
 				continue
 			}
-			x, _ := indicesToXY(ri, uint8(nti))
+			x, _ := indexToXY(nti)
 			if tcCol == x {
 				// column already a candidate
 				continue
 			}
-			if tcCol != 10 {
+			if tcCol != 255 {
 				// multiple candidate columns
 				continue OnePossibleColumnLoop
 			}
 			tcCol = x
 		}
-		if tcCol == 10 {
+		if tcCol == 255 {
 			// no candidate columns. Wat?
 			*b = b0
 			return 0
 		}
 
-		tcColRef := b.ColRefs(tcCol)
-		for _, ntr := range tcColRef {
-			if ntr.RegionIndex == ri {
+		for _, nti := range ColumnIndices(tcCol) {
+			if indexToRegionIndex(nti) == rgnIdx {
 				// skip our region
 				continue
 			}
-			if b.Set(ntr.RegionIndex, ntr.TileIndex, b[ntr.RegionIndex][ntr.TileIndex]&^v) == 0 {
+			if b.Set(nti, b[nti]&^v) == 0 {
 				// invalid board configuration, revert the change
 				*b = b0
 				return 0
@@ -400,12 +398,14 @@ func (b *Board) ReadFrom(r io.Reader) (int64, error) {
 	for i := 0; i < len(ba); i += 2 {
 		x := uint8(i / 2 % 9)
 		y := uint8(i / 2 / 9)
-		ri, ti := xyToIndices(x, y)
+		ti := xyToIndex(x, y)
 		t := byteToTileMap[ba[i]]
 		if t == 0 {
 			return int64(nr), errors.New("invalid byte")
 		}
-		b.Set(ri, ti, t)
+		if b.Set(ti, t) == 0 {
+			return int64(nr), fmt.Errorf("invalid board (offset=%d byte=%q)", i, []byte{ba[i]})
+		}
 		//b[ri][ti] = byteToTileMap[ba[i]]
 	}
 
@@ -416,8 +416,8 @@ func (b Board) Art() [9 * 9 * 2]byte {
 	var ba [9 * 9 * 2]byte
 	for y := uint8(0); y < 9; y++ {
 		rowStart := y * 9 * 2
-		for x, tr := range b.RowRefs(y) {
-			t := b[tr.RegionIndex][tr.TileIndex]
+		for x, ti := range RowIndices(y) {
+			t := b[ti]
 			i := rowStart + uint8(x)*2
 			ba[i] = '0' + t.Num()
 			if ba[i] == '0' {
