@@ -8,7 +8,17 @@ import (
 )
 
 type Tile uint16 // 9-bit mask of the possible digits
-type Board [9 * 9]Tile
+type Board struct {
+	Tiles [9 * 9]Tile
+
+	// changeSet is a bit mask representing which tiles have changed.
+	// Each row of regions is a uint32 (27 tiles, so 5 bytes unused).
+	changeSet [3]uint32
+
+	// changes is an array used as the backing store for the slice returned by
+	// Changes(). This is to reduce heap allocations.
+	changes [9 * 9]uint8
+}
 
 const tAny = Tile((1 << 9) - 1)
 
@@ -115,7 +125,7 @@ var ColumnIndices [9][9]uint8 = func() (idcs [9][9]uint8) {
 }()
 
 func NewBoard() Board {
-	return Board{
+	return Board{Tiles: [81]Tile{
 		tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
 		tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
 		tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
@@ -125,7 +135,7 @@ func NewBoard() Board {
 		tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
 		tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
 		tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
-	}
+	}}
 }
 
 // Set tries to set the given indices to the given Tile.
@@ -140,11 +150,17 @@ func (b *Board) Set(ti uint8, t Tile) bool {
 		*b = b0
 		return false
 	}
+	for b.HasChanges() {
+		if !b.evaluateAlgorithms() {
+			*b = b0
+			return false
+		}
+	}
 	return true
 }
 
 func (b *Board) set(ti uint8, t Tile) bool {
-	t0 := b[ti]
+	t0 := b.Tiles[ti]
 
 	// discard possible values based on the current tile mask
 	t &= t0
@@ -158,229 +174,298 @@ func (b *Board) set(ti uint8, t Tile) bool {
 		return true
 	}
 
-	b[ti] = t
+	b.Tiles[ti] = t
+	b.changeSet[ti/27] |= 1 << (ti % 27)
 
-	if !t.isKnown() {
-		// it has multiple possible values, so we can't eliminated possiblities
-		// from our neighbors
-		return true
+	return true
+}
+
+func (b *Board) HasChanges() bool {
+	return b.changeSet[0] != 0 || b.changeSet[1] != 0 || b.changeSet[2] != 0
+}
+func (b *Board) ClearChanges() {
+	b.changeSet[0] = 0
+	b.changeSet[1] = 0
+	b.changeSet[2] = 0
+}
+func (b *Board) Changes() []uint8 {
+	changes := b.changes[:0]
+	for rri, rrm := range b.changeSet {
+		for i := uint8(0); i < 27; i++ {
+			if rrm&1 != 0 {
+				changes = append(changes, uint8(rri)*27+i)
+			}
+			rrm = rrm >> 1
+		}
 	}
-	// ok, it has only a single possible value, so remove the value from
-	// neighbors possiblities
+	return changes
+}
 
-	x, y := indexToXY(ti)
-	rgnIdx := indexToRegionIndex(ti)
+func (b *Board) evaluateAlgorithms() bool {
+	changes := b.Changes()
+	b.ClearChanges()
 
-	rgnIndices := RegionIndices[rgnIdx][:]
-
-	// iterate over the region
-	for _, nti := range rgnIndices[:] {
-		if nti == ti {
-			// skip ourself
+	// look for tiles which have a single possible value. If any are found,
+	// eliminate the value from that tile's neighbors.
+	for _, ti := range changes {
+		t := b.Tiles[ti]
+		if !t.isKnown() {
 			continue
 		}
-		if !b.set(nti, b[nti]&^t) {
-			// invalid board configuration
-			return false
-		}
-	}
 
-	rowIndices := RowIndices[y][:]
+		x, y := indexToXY(ti)
+		rgnIdx := indexToRegionIndex(ti)
+		rgnIndices := RegionIndices[rgnIdx][:]
+		rowIndices := RowIndices[y][:]
+		colIndices := ColumnIndices[x][:]
 
-	// iterate over the row
-	for _, nti := range rowIndices {
-		if nti == ti {
-			// skip ourself
-			continue
-		}
-		if !b.set(nti, b[nti]&^t) {
-			// invalid board configuration
-			return false
-		}
-	}
-
-	colIndices := ColumnIndices[x][:]
-
-	// iterate over the column
-	for _, nti := range colIndices {
-		if nti == ti {
-			// skip ourself
-			continue
-		}
-		if !b.set(nti, b[nti]&^t) {
-			// invalid board configuration
-			return false
-		}
-	}
-
-	// ok, now scan each set of neighbors for any values which only have one
-	// possible tile
-
-	// iterate over the region
-OnePossibleTileRegionLoop:
-	for v := Tile(1); v < tAny; v = v << 1 {
-		//TODO this feels like there should have an optimized way to find which bits are set in only one of a set of numbers
-		tcIdx := uint8(255)
+		// iterate over the region
 		for _, nti := range rgnIndices {
-			nt := b[nti]
-			if nt == v {
-				// this value already has been found
-				continue OnePossibleTileRegionLoop
-			}
-			if nt&v == 0 {
-				// not a possible tile
+			if nti == ti {
+				// skip ourself
 				continue
 			}
-			// is a candidate
-			if tcIdx != 255 {
-				// this is the second candidate
-				continue OnePossibleTileRegionLoop
+			if !b.set(nti, b.Tiles[nti]&^t) {
+				// invalid board configuration
+				return false
 			}
-			tcIdx = nti
 		}
-		if tcIdx == 255 {
-			// no possible tiles for this value
-			//TODO does this ever happen?
-			return false
-		}
-		if !b.set(tcIdx, v) {
-			// invalid board configuration
-			//TODO does this ever happen?
-			return false
-		}
-	}
 
-OnePossibleTileRowLoop:
-	for v := Tile(1); v < tAny; v = v << 1 {
-		tcIdx := uint8(255)
+		// iterate over the row
 		for _, nti := range rowIndices {
-			nt := b[nti]
-			if nt == v {
-				continue OnePossibleTileRowLoop
-			}
-			if nt&v == 0 {
+			if nti == ti {
+				// skip ourself
 				continue
 			}
-			if tcIdx != 255 {
-				continue OnePossibleTileRowLoop
+			if !b.set(nti, b.Tiles[nti]&^t) {
+				// invalid board configuration
+				return false
 			}
-			tcIdx = nti
 		}
-		if tcIdx == 255 {
-			return false
-		}
-		if !b.set(tcIdx, v) {
-			return false
+
+		// iterate over the column
+		for _, nti := range colIndices {
+			if nti == ti {
+				// skip ourself
+				continue
+			}
+			if !b.set(nti, b.Tiles[nti]&^t) {
+				// invalid board configuration
+				return false
+			}
 		}
 	}
 
-OnePossibleTileColumnLoop:
-	for v := Tile(1); v < tAny; v = v << 1 {
-		tcIdx := uint8(255)
-		for _, nti := range colIndices {
-			nt := b[nti]
-			if nt == v {
-				continue OnePossibleTileColumnLoop
+	// now scan each set of neighbors for any values which only have one
+	// possible tile
+	var regionsSeen uint16
+	var rowsSeen uint8
+	var columnsSeen uint8
+	for _, ti := range changes {
+		x, y := indexToXY(ti)
+		rgnIdx := indexToRegionIndex(ti)
+
+		// Iterate over the region.
+		// But first, see if we've already done so for this specific region.
+		regionMask := uint16(1 << rgnIdx)
+		if regionsSeen&regionMask == 0 || true {
+			regionsSeen |= regionMask
+
+			rgnIndices := RegionIndices[rgnIdx][:]
+		OnePossibleTileRegionLoop:
+			for v := Tile(1); v < tAny; v = v << 1 {
+				//TODO this feels like there should have an optimized way to find which bits are set in only one of a set of numbers
+				tcIdx := uint8(255)
+				for _, nti := range rgnIndices {
+					nt := b.Tiles[nti]
+					if nt == v {
+						// this value already has been found
+						continue OnePossibleTileRegionLoop
+					}
+					if nt&v == 0 {
+						// not a possible tile
+						continue
+					}
+					// is a candidate
+					if tcIdx != 255 {
+						// this is the second candidate
+						continue OnePossibleTileRegionLoop
+					}
+					tcIdx = nti
+				}
+				if tcIdx == 255 {
+					// no possible tiles for this value
+					//TODO does this ever happen?
+					return false
+				}
+				if !b.set(tcIdx, v) {
+					// invalid board configuration
+					//TODO does this ever happen?
+					return false
+				}
 			}
-			if nt&v == 0 {
-				continue
-			}
-			if tcIdx != 255 {
-				continue OnePossibleTileColumnLoop
-			}
-			tcIdx = nti
 		}
-		if tcIdx == 255 {
-			return false
+
+		// Now iterate over the row.
+		// Again, seeing if we've already done so.
+		rowMask := uint8(1 << y)
+		if rowsSeen&rowMask == 0 || true {
+			rowsSeen |= rowMask
+
+			rowIndices := RowIndices[y][:]
+		OnePossibleTileRowLoop:
+			for v := Tile(1); v < tAny; v = v << 1 {
+				tcIdx := uint8(255)
+				for _, nti := range rowIndices {
+					nt := b.Tiles[nti]
+					if nt == v {
+						continue OnePossibleTileRowLoop
+					}
+					if nt&v == 0 {
+						continue
+					}
+					if tcIdx != 255 {
+						continue OnePossibleTileRowLoop
+					}
+					tcIdx = nti
+				}
+				if tcIdx == 255 {
+					return false
+				}
+				if !b.set(tcIdx, v) {
+					return false
+				}
+			}
 		}
-		if !b.set(tcIdx, v) {
-			return false
+
+		// And now the column.
+		columnMask := uint8(1 << x)
+		if columnsSeen&columnMask == 0 || true {
+			columnsSeen |= columnMask
+
+			colIndices := ColumnIndices[x][:]
+		OnePossibleTileColumnLoop:
+			for v := Tile(1); v < tAny; v = v << 1 {
+				tcIdx := uint8(255)
+				for _, nti := range colIndices {
+					nt := b.Tiles[nti]
+					if nt == v {
+						continue OnePossibleTileColumnLoop
+					}
+					if nt&v == 0 {
+						continue
+					}
+					if tcIdx != 255 {
+						continue OnePossibleTileColumnLoop
+					}
+					tcIdx = nti
+				}
+				if tcIdx == 255 {
+					return false
+				}
+				if !b.set(tcIdx, v) {
+					return false
+				}
+			}
 		}
 	}
 
 	// only-row elimination
 	// see if there is only a single row or column within a region which can hold a value. If so, eliminate neighboring regions from holding that value in the same row.
 
-	// row first
-OnePossibleRowLoop:
-	for v := Tile(1); v < tAny; v = v << 1 {
-		tcRow := uint8(255)
-		for _, nti := range rgnIndices {
-			nt := b[nti]
-			if nt == v {
-				// this value has already been found
-				continue OnePossibleRowLoop
-			}
-			if nt&v == 0 {
-				// not a possible tile
-				continue
-			}
-			_, y := indexToXY(nti)
-			if tcRow == y {
-				// row already a candidate
-				continue
-			}
-			if tcRow != 255 {
-				// multiple candidate rows
-				continue OnePossibleRowLoop
-			}
-			tcRow = y
+	regionsSeen = 0
+	for _, ti := range changes {
+		// skip any regions we've already seen this round
+		rgnIdx := indexToRegionIndex(ti)
+		regionMask := uint16(1 << rgnIdx)
+		if regionsSeen&regionMask != 0 && false {
+			continue
 		}
-		if tcRow == 255 {
-			// no candidate rows. Wat?
-			return false
-		}
+		regionsSeen |= regionMask
 
-		// iterate over the candidate row, excluding the value from tiles in other regions
-		for _, nti := range RowIndices[tcRow][:] {
-			if indexToRegionIndex(nti) == rgnIdx {
-				// skip our region
-				continue
+		rgnIndices := RegionIndices[rgnIdx][:]
+
+		// row first
+	OnePossibleRowLoop:
+		for v := Tile(1); v < tAny; v = v << 1 {
+			tcRow := uint8(255)
+			for _, nti := range rgnIndices {
+				nt := b.Tiles[nti]
+				if nt == v {
+					// this value has already been found
+					continue OnePossibleRowLoop
+				}
+				if nt&v == 0 {
+					// not a possible tile
+					continue
+				}
+				_, y := indexToXY(nti)
+				if tcRow == y {
+					// row already a candidate
+					continue
+				}
+				if tcRow != 255 {
+					// multiple candidate rows
+					continue OnePossibleRowLoop
+				}
+				tcRow = y
 			}
-			if !b.set(nti, b[nti]&^v) {
-				// invalid board configuration
+			if tcRow == 255 {
+				// no candidate rows. Wat?
 				return false
 			}
-		}
-	}
 
-OnePossibleColumnLoop:
-	for v := Tile(1); v < tAny; v = v << 1 {
-		tcCol := uint8(255)
-		for _, nti := range rgnIndices {
-			nt := b[nti]
-			if nt == v {
-				// this value has already been found
-				continue OnePossibleColumnLoop
+			// iterate over the candidate row, excluding the value from tiles in other regions
+			for _, nti := range RowIndices[tcRow][:] {
+				if indexToRegionIndex(nti) == rgnIdx {
+					// skip our region
+					continue
+				}
+				if !b.set(nti, b.Tiles[nti]&^v) {
+					// invalid board configuration
+					return false
+				}
 			}
-			if nt&v == 0 {
-				// not a possible tile
-				continue
-			}
-			x, _ := indexToXY(nti)
-			if tcCol == x {
-				// column already a candidate
-				continue
-			}
-			if tcCol != 255 {
-				// multiple candidate columns
-				continue OnePossibleColumnLoop
-			}
-			tcCol = x
-		}
-		if tcCol == 255 {
-			// no candidate columns. Wat?
-			return false
 		}
 
-		for _, nti := range ColumnIndices[tcCol][:] {
-			if indexToRegionIndex(nti) == rgnIdx {
-				// skip our region
-				continue
+	OnePossibleColumnLoop:
+		for v := Tile(1); v < tAny; v = v << 1 {
+			tcCol := uint8(255)
+			for _, nti := range rgnIndices {
+				nt := b.Tiles[nti]
+				if nt == v {
+					// this value has already been found
+					continue OnePossibleColumnLoop
+				}
+				if nt&v == 0 {
+					// not a possible tile
+					continue
+				}
+				x, _ := indexToXY(nti)
+				if tcCol == x {
+					// column already a candidate
+					continue
+				}
+				if tcCol != 255 {
+					// multiple candidate columns
+					continue OnePossibleColumnLoop
+				}
+				tcCol = x
 			}
-			if !b.set(nti, b[nti]&^v) {
-				// invalid board configuration
+			if tcCol == 255 {
+				// no candidate columns. Wat?
 				return false
+			}
+
+			for _, nti := range ColumnIndices[tcCol][:] {
+				if indexToRegionIndex(nti) == rgnIdx {
+					// skip our region
+					continue
+				}
+				if !b.set(nti, b.Tiles[nti]&^v) {
+					// invalid board configuration
+					return false
+				}
 			}
 		}
 	}
@@ -403,10 +488,16 @@ func (b *Board) ReadFrom(r io.Reader) (int64, error) {
 		if t == 0 {
 			return int64(nr), errors.New("invalid byte")
 		}
-		if !b.Set(ti, t) {
+		if !b.set(ti, t) {
 			return int64(nr), fmt.Errorf("invalid board (offset=%d byte=%q)", i, []byte{ba[i]})
 		}
-		//b[ri][ti] = byteToTileMap[ba[i]]
+		//b.Tiles[ri][ti] = byteToTileMap[ba[i]]
+	}
+
+	for b.HasChanges() {
+		if !b.evaluateAlgorithms() {
+			return int64(nr), fmt.Errorf("invalid board")
+		}
 	}
 
 	return int64(nr), nil
@@ -417,7 +508,7 @@ func (b Board) Art() [9 * 9 * 2]byte {
 	for y := uint8(0); y < 9; y++ {
 		rowStart := y * 9 * 2
 		for x, ti := range RowIndices[y][:] {
-			t := b[ti]
+			t := b.Tiles[ti]
 			i := rowStart + uint8(x)*2
 			ba[i] = '0' + t.Num()
 			if ba[i] == '0' {
