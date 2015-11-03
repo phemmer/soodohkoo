@@ -213,7 +213,15 @@ func (b *Board) evaluateAlgorithms() bool {
 		return false
 	}
 
-	return b.algoOnlyRow(changes)
+	if !b.algoOnlyRow(changes) {
+		return false
+	}
+
+	if !b.algoNakedSubset(changes) {
+		return false
+	}
+
+	return true
 }
 
 // algoKnownValueElimination looks for tiles which have a known value. If any
@@ -486,6 +494,158 @@ func (b *Board) algoOnlyRow(changes []uint8) bool {
 				if !b.set(nti, b.Tiles[nti]&^v) {
 					// invalid board configuration
 					return false
+				}
+			}
+		}
+	}
+
+	return true
+}
+
+// algoNakedSubset finds any tiles within a neighbor set for which the number of
+// possible values within the tile is the same as the number of tiles with the
+// same possible values, and eliminates the values in those tiles from all other
+// tiles within the set.
+//
+// https://www.kristanix.com/sudokuepic/sudoku-solving-techniques.php "Naked Subset"
+//
+func (b *Board) algoNakedSubset(changes []uint8) bool {
+	var regionsSeen uint16
+	var rowsSeen uint16
+	var columnsSeen uint16
+
+	for _, ti := range changes {
+		rgnIdx := indexToRegionIndex(ti)
+		x, y := indexToXY(ti)
+
+		// first scan the region
+		regionMask := uint16(1 << rgnIdx)
+		if regionsSeen&regionMask == 0 {
+			regionsSeen |= regionMask
+
+			rgnIndices := RegionIndices[rgnIdx][:]
+			rgnSetCounts := map[Tile]uint8{}
+			for _, nti := range rgnIndices {
+				nt := b.Tiles[nti]
+				if nt.isKnown() {
+					// Technically this is one such case. One possible value within the tile,
+					// and one tile with this possible set. But this is already handled by
+					// algoOnePossibleTile.
+					continue
+				}
+
+				rgnSetCounts[nt]++
+			}
+			for t, setCount := range rgnSetCounts {
+				// https://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetKernighan
+				var possibilities uint8
+				for t := t; t != 0; possibilities++ {
+					t &= t - 1
+				}
+				if possibilities != setCount {
+					continue
+				}
+				// if we're here, then we have a combination of N tiles with N possibilities.
+				for _, nti := range rgnIndices {
+					nt := b.Tiles[nti]
+					if nt == t {
+						// this is one of the N tiles
+						continue
+					}
+					if nt&t != 0 {
+						// this tile has some of the possibilities, remove them
+						if !b.set(nti, nt&^t) {
+							return false
+						}
+					}
+				}
+			}
+		}
+
+		// now scan the row
+		rowMask := uint16(1 << y)
+		if rowsSeen&rowMask == 0 {
+			rowsSeen |= rowMask
+
+			rowIndices := RowIndices[y][:]
+			rowSetCounts := map[Tile]uint8{}
+			for _, nti := range rowIndices {
+				nt := b.Tiles[nti]
+				if nt.isKnown() {
+					// Technically this is one such case. One possible value within the tile,
+					// and one tile with this possible set. But as we already know the value we
+					// don't need to do anything.
+					continue
+				}
+
+				rowSetCounts[nt]++
+			}
+			for t, setCount := range rowSetCounts {
+				// https://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetKernighan
+				var possibilities uint8
+				for t := t; t != 0; possibilities++ {
+					t &= t - 1
+				}
+				if possibilities != setCount {
+					continue
+				}
+				// if we're here, then we have a combination of N tiles with N possibilities.
+				for _, nti := range rowIndices {
+					nt := b.Tiles[nti]
+					if nt == t {
+						// this is one of the N tiles
+						continue
+					}
+					if nt&t != 0 {
+						// this tile has some of the possibilities, remove them
+						if !b.set(nti, nt&^t) {
+							return false
+						}
+					}
+				}
+			}
+		}
+
+		// now scan the column
+		columnMask := uint16(1 << x)
+		if columnsSeen&columnMask == 0 {
+			columnsSeen |= columnMask
+
+			colIndices := ColumnIndices[x][:]
+			colSetCounts := map[Tile]uint8{}
+			for _, nti := range colIndices {
+				nt := b.Tiles[nti]
+				if nt.isKnown() {
+					// Technically this is one such case. One possible value within the tile,
+					// and one tile with this possible set. But as we already know the value we
+					// don't need to do anything.
+					continue
+				}
+
+				colSetCounts[nt]++
+			}
+			for t, setCount := range colSetCounts {
+				// https://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetKernighan
+				var possibilities uint8
+				for t := t; t != 0; possibilities++ {
+					t &= t - 1
+				}
+				if possibilities != setCount {
+					continue
+				}
+				// if we're here, then we have a combination of N tiles with N possibilities.
+				for _, nti := range colIndices {
+					nt := b.Tiles[nti]
+					if nt == t {
+						// this is one of the N tiles
+						continue
+					}
+					if nt&t != 0 {
+						// this tile has some of the possibilities, remove them
+						if !b.set(nti, nt&^t) {
+							return false
+						}
+					}
 				}
 			}
 		}
