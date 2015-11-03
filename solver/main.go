@@ -205,8 +205,20 @@ func (b *Board) evaluateAlgorithms() bool {
 	changes := b.Changes()
 	b.ClearChanges()
 
-	// look for tiles which have a single possible value. If any are found,
-	// eliminate the value from that tile's neighbors.
+	if !b.algoKnownValueElimination(changes) {
+		return false
+	}
+
+	if !b.algoOnePossibleTile(changes) {
+		return false
+	}
+
+	return b.algoOnlyRow(changes)
+}
+
+// algoKnownValueElimination looks for tiles which have a known value. If any
+// are found remove that value as a possibility from its neighbors.
+func (b *Board) algoKnownValueElimination(changes []uint8) bool {
 	for _, ti := range changes {
 		t := b.Tiles[ti]
 		if !t.isKnown() {
@@ -256,8 +268,12 @@ func (b *Board) evaluateAlgorithms() bool {
 		}
 	}
 
-	// now scan each set of neighbors for any values which only have one
-	// possible tile
+	return true
+}
+
+// algoOnePossibleTile scans each set of neighbors for any values which have
+// only one possible tile.
+func (b *Board) algoOnePossibleTile(changes []uint8) bool {
 	var regionsSeen uint16
 	var rowsSeen uint8
 	var columnsSeen uint8
@@ -268,7 +284,7 @@ func (b *Board) evaluateAlgorithms() bool {
 		// Iterate over the region.
 		// But first, see if we've already done so for this specific region.
 		regionMask := uint16(1 << rgnIdx)
-		if regionsSeen&regionMask == 0 || true {
+		if regionsSeen&regionMask == 0 {
 			regionsSeen |= regionMask
 
 			rgnIndices := RegionIndices[rgnIdx][:]
@@ -309,7 +325,7 @@ func (b *Board) evaluateAlgorithms() bool {
 		// Now iterate over the row.
 		// Again, seeing if we've already done so.
 		rowMask := uint8(1 << y)
-		if rowsSeen&rowMask == 0 || true {
+		if rowsSeen&rowMask == 0 {
 			rowsSeen |= rowMask
 
 			rowIndices := RowIndices[y][:]
@@ -340,7 +356,7 @@ func (b *Board) evaluateAlgorithms() bool {
 
 		// And now the column.
 		columnMask := uint8(1 << x)
-		if columnsSeen&columnMask == 0 || true {
+		if columnsSeen&columnMask == 0 {
 			columnsSeen |= columnMask
 
 			colIndices := ColumnIndices[x][:]
@@ -370,15 +386,19 @@ func (b *Board) evaluateAlgorithms() bool {
 		}
 	}
 
-	// only-row elimination
-	// see if there is only a single row or column within a region which can hold a value. If so, eliminate neighboring regions from holding that value in the same row.
+	return true
+}
 
-	regionsSeen = 0
+// algoOnlyRow checks if there is only a single row or column within a region
+// which can hold a value. If so, it eliminates the value from the
+// possibilities within the same row/column of neighboring regions.
+func (b *Board) algoOnlyRow(changes []uint8) bool {
+	var regionsSeen uint16
 	for _, ti := range changes {
 		// skip any regions we've already seen this round
 		rgnIdx := indexToRegionIndex(ti)
 		regionMask := uint16(1 << rgnIdx)
-		if regionsSeen&regionMask != 0 && false {
+		if regionsSeen&regionMask != 0 {
 			continue
 		}
 		regionsSeen |= regionMask
