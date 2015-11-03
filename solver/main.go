@@ -275,8 +275,9 @@ func (b *Board) algoKnownValueElimination(changes []uint8) bool {
 // only one possible tile.
 func (b *Board) algoOnePossibleTile(changes []uint8) bool {
 	var regionsSeen uint16
-	var rowsSeen uint8
-	var columnsSeen uint8
+	var rowsSeen uint16
+	var columnsSeen uint16
+
 	for _, ti := range changes {
 		x, y := indexToXY(ti)
 		rgnIdx := indexToRegionIndex(ti)
@@ -324,7 +325,7 @@ func (b *Board) algoOnePossibleTile(changes []uint8) bool {
 
 		// Now iterate over the row.
 		// Again, seeing if we've already done so.
-		rowMask := uint8(1 << y)
+		rowMask := uint16(1 << y)
 		if rowsSeen&rowMask == 0 {
 			rowsSeen |= rowMask
 
@@ -355,7 +356,7 @@ func (b *Board) algoOnePossibleTile(changes []uint8) bool {
 		}
 
 		// And now the column.
-		columnMask := uint8(1 << x)
+		columnMask := uint16(1 << x)
 		if columnsSeen&columnMask == 0 {
 			columnsSeen |= columnMask
 
