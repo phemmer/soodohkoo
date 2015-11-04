@@ -221,6 +221,10 @@ func (b *Board) evaluateAlgorithms() bool {
 		return false
 	}
 
+	if !b.algoHiddenSubset(changes) {
+		return false
+	}
+
 	return true
 }
 
@@ -651,6 +655,217 @@ func (b *Board) algoNakedSubset(changes []uint8) bool {
 		}
 	}
 
+	return true
+}
+
+// algoHiddenSubset finds all subsets which have only the same number of possible tiles as the number of possible values within the set.
+// Think of 2 tiles with possiblities [1,4,7] and [1,4,9], where these are the only to tiles to contain possibilities for 1 & 4. Because of that, we can exempt 7 & 9 from the possibilities of these 2 tiles.
+// Likewise for [1,4,7,9],[1,3,4,7],[1,2,4,7], if no other tile has 1, 4, or 7, we can set all 3 tiles to [1,4,7].
+func (b *Board) algoHiddenSubset(changes []uint8) bool {
+	// the algorithm works like this:
+	// 1. Iterate over the values 1-9
+	// 1.1. Find each tile which can hold that value.
+	// 2. Group the values together which have the same candidate tiles.
+	// 2.1 If the number of grouped values is the same as the number of candidate
+	//     tiles, that is a hidden subset.
+	// 2.2 Remove all other possible values from the candidate tiles.
+
+	//TODO this algorithm chews up a lot of CPU time. Implementing it makes the solver about 10x slower.
+
+	var regionsSeen uint16
+	var rowsSeen uint16
+	var columnsSeen uint16
+
+	for _, ti := range changes {
+		x, y := indexToXY(ti)
+		rgnIdx := indexToRegionIndex(ti)
+
+		// iterate over the region
+		regionMask := uint16(1 << rgnIdx)
+		if regionsSeen&regionMask == 0 {
+			regionsSeen |= regionMask
+
+			// valueTileIndices is a list of values to a bit mask of tile indices which hold that value.
+			// E.G. `3 => 0b001000010` means that the value 3 is a possibility for tiles 2 & 7.
+			valueTileIndices := [9]uint16{}
+			rgnIndices := RegionIndices[rgnIdx][:]
+			// 1. Iterate over the values 1-9
+			for v := uint8(0); v < 9; v++ { // v is one less than the actual number we're dealing with
+				// 1.1. Find each tile which can hold that value.
+				for i, nti := range rgnIndices {
+					nt := b.Tiles[nti]
+					if nt&(1<<v) == 0 {
+						continue
+					}
+					valueTileIndices[v] |= 1 << uint16(i)
+				}
+			}
+
+			// 2. Group the values together which have the same candidate tiles.
+			// We basically reverse the valueTileIndices list.
+			// sets is a map of a set of indices (as a bit mask) to the values in that set.
+			// E.G. `0b001000010 => [1,3]` means that tiles 2 & 7 are both the only
+			// candidates for values 1 & 3.
+			sets := map[uint16][]uint8{}
+			for v, rtiMask := range valueTileIndices {
+				sets[rtiMask] = append(sets[rtiMask], uint8(v))
+			}
+
+			// 2.1 If the number of grouped values is the same as the number of candidate
+			// tiles, that is a hidden subset.
+			for rtiMask, values := range sets {
+				// break the tile indicies bitmask out into separate indicies
+				var tileIndices []uint8
+				for rti := uint8(0); rti < 9; rti++ {
+					if rtiMask&(1<<rti) == 0 {
+						continue
+					}
+					tileIndices = append(tileIndices, rti)
+				}
+
+				if len(values) != len(tileIndices) {
+					// not a hidden subset
+					continue
+				}
+
+				var valuesMask Tile
+				for _, v := range values {
+					valuesMask |= 1 << v // v is still one less than the actual number we're dealing with
+				}
+
+				// 2.2 Remove all other possible values from the candidate tiles.
+				for _, rti := range tileIndices {
+					if !b.set(rgnIndices[rti], valuesMask) {
+						return false
+					}
+				}
+			}
+		}
+
+		// iterate over the row
+		rowMask := uint16(1 << y)
+		if rowsSeen&rowMask == 0 {
+			rowsSeen |= rowMask
+
+			// valueTileIndices is a list of values to a bit mask of tile indices which hold that value.
+			// E.G. `3 => 0b001000010` means that the value 3 is a possibility for tiles 2 & 7.
+			valueTileIndices := [9]uint16{}
+			rowIndices := RowIndices[y][:]
+			// 1. Iterate over the values 1-9
+			for v := uint8(0); v < 9; v++ { // v is one less than the actual number we're dealing with
+				// 1.1. Find each tile which can hold that value.
+				for i, nti := range rowIndices {
+					nt := b.Tiles[nti]
+					if nt&(1<<v) == 0 {
+						continue
+					}
+					valueTileIndices[v] |= 1 << uint16(i)
+				}
+			}
+
+			// 2. Group the values together which have the same candidate tiles.
+			// We basically reverse the valueTileIndices list.
+			// sets is a map of a set of indices (as a bit mask) to the values in that set.
+			// E.G. `0b001000010 => [1,3]` means that tiles 2 & 7 are both the only
+			// candidates for values 1 & 3.
+			sets := map[uint16][]uint8{}
+			for v, rtiMask := range valueTileIndices {
+				sets[rtiMask] = append(sets[rtiMask], uint8(v))
+			}
+
+			// 2.1 If the number of grouped values is the same as the number of candidate
+			// tiles, that is a hidden subset.
+			for rtiMask, values := range sets {
+				// break the tile indicies bitmask out into separate indicies
+				var tileIndices []uint8
+				for rti := uint8(0); rti < 9; rti++ {
+					if rtiMask&(1<<rti) == 0 {
+						continue
+					}
+					tileIndices = append(tileIndices, rti)
+				}
+
+				if len(values) != len(tileIndices) {
+					// not a hidden subset
+					continue
+				}
+
+				var valuesMask Tile
+				for _, v := range values {
+					valuesMask |= 1 << v // v is still one less than the actual number we're dealing with
+				}
+
+				// 2.2 Remove all other possible values from the candidate tiles.
+				for _, rti := range tileIndices {
+					if !b.set(rowIndices[rti], valuesMask) {
+						return false
+					}
+				}
+			}
+		}
+
+		// iterate over the column
+		colMask := uint16(1 << x)
+		if columnsSeen&colMask == 0 {
+			columnsSeen |= colMask
+
+			// valueTileIndices is a list of values to a bit mask of tile indices which hold that value.
+			// E.G. `3 => 0b001000010` means that the value 3 is a possibility for tiles 2 & 7.
+			valueTileIndices := [9]uint16{}
+			colIndices := ColumnIndices[x][:]
+			// 1. Iterate over the values 1-9
+			for v := uint8(0); v < 9; v++ { // v is one less than the actual number we're dealing with
+				// 1.1. Find each tile which can hold that value.
+				for i, nti := range colIndices {
+					nt := b.Tiles[nti]
+					if nt&(1<<v) == 0 {
+						continue
+					}
+					valueTileIndices[v] |= 1 << uint16(i)
+				}
+			}
+
+			// 2. Group the values together which have the same candidate tiles.
+			// We basically reverse the valueTileIndices list.
+			// sets is a map of a set of indices (as a bit mask) to the values in that set.
+			// E.G. `0b001000010 => [1,3]` means that tiles 2 & 7 are both the only
+			// candidates for values 1 & 3.
+			sets := map[uint16][]uint8{}
+			for v, ctiMask := range valueTileIndices {
+				sets[ctiMask] = append(sets[ctiMask], uint8(v))
+			}
+
+			// 2.1 If the number of grouped values is the same as the number of candidate
+			// tiles, that is a hidden subset.
+			for ctiMask, values := range sets {
+				// break the tile indicies bitmask out into separate indicies
+				var tileIndices []uint8
+				for cti := uint8(0); cti < 9; cti++ {
+					if ctiMask&(1<<cti) == 0 {
+						continue
+					}
+					tileIndices = append(tileIndices, cti)
+				}
+
+				if len(values) != len(tileIndices) {
+					// not a hidden subset
+					continue
+				}
+
+				var valuesMask Tile
+				for _, v := range values {
+					valuesMask |= 1 << v // v is still one less than the actual number we're dealing with
+				}
+
+				// 2.2 Remove all other possible values from the candidate tiles.
+				for _, cti := range tileIndices {
+					if !b.set(colIndices[cti], valuesMask) {
+						return false
+					}
+				}
+			}
+		}
+	}
 	return true
 }
 
