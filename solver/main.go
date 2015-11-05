@@ -107,6 +107,17 @@ var RowIndices [9][9]uint8 = func() (idcs [9][9]uint8) {
 	return
 }()
 
+var MaskBits [512][]uint8 = func() (mbs [512][]uint8) {
+	for i := uint16(0); i < 512; i++ {
+		for j := uint8(0); j < 9; j++ {
+			if i&(1<<j) != 0 {
+				mbs[i] = append(mbs[i], j)
+			}
+		}
+	}
+	return
+}()
+
 var ColumnIndices [9][9]uint8 = func() (idcs [9][9]uint8) {
 	for x := range idcs {
 		idcs[x] = [9]uint8{
@@ -541,12 +552,8 @@ func (b *Board) algoNakedSubset(changes []uint8) bool {
 				rgnSetCounts[nt]++
 			}
 			for t, setCount := range rgnSetCounts {
-				// https://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetKernighan
-				var possibilities uint8
-				for t := t; t != 0; possibilities++ {
-					t &= t - 1
-				}
-				if possibilities != setCount {
+				possibilityCount := uint8(len(MaskBits[t]))
+				if possibilityCount != setCount {
 					continue
 				}
 				// if we're here, then we have a combination of N tiles with N possibilities.
@@ -585,12 +592,8 @@ func (b *Board) algoNakedSubset(changes []uint8) bool {
 				rowSetCounts[nt]++
 			}
 			for t, setCount := range rowSetCounts {
-				// https://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetKernighan
-				var possibilities uint8
-				for t := t; t != 0; possibilities++ {
-					t &= t - 1
-				}
-				if possibilities != setCount {
+				possibilityCount := uint8(len(MaskBits[t]))
+				if possibilityCount != setCount {
 					continue
 				}
 				// if we're here, then we have a combination of N tiles with N possibilities.
@@ -629,12 +632,8 @@ func (b *Board) algoNakedSubset(changes []uint8) bool {
 				colSetCounts[nt]++
 			}
 			for t, setCount := range colSetCounts {
-				// https://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetKernighan
-				var possibilities uint8
-				for t := t; t != 0; possibilities++ {
-					t &= t - 1
-				}
-				if possibilities != setCount {
+				possibilityCount := uint8(len(MaskBits[t]))
+				if possibilityCount != setCount {
 					continue
 				}
 				// if we're here, then we have a combination of N tiles with N possibilities.
@@ -703,34 +702,25 @@ func (b *Board) algoHiddenSubset(changes []uint8) bool {
 
 			// 2. Group the values together which have the same candidate tiles.
 			// We basically reverse the valueTileIndices list.
-			// sets is a map of a set of indices (as a bit mask) to the values in that set.
-			// E.G. `0b001000010 => [1,3]` means that tiles 2 & 7 are both the only
+			// sets is a map of a set of indices (as a bit mask) to a bit mask of the
+			// values in that set.
+			// E.G. `0b001000010 => 0b000000101` means that tiles 2 & 7 are both the only
 			// candidates for values 1 & 3.
-			sets := map[uint16][]uint8{}
-			for v, rtiMask := range valueTileIndices {
-				sets[rtiMask] = append(sets[rtiMask], uint8(v))
+			sets := make(map[uint16]Tile, 9)
+			for v, rtiMask := range valueTileIndices[:] {
+				sets[rtiMask] |= 1 << uint8(v)
 			}
 
 			// 2.1 If the number of grouped values is the same as the number of candidate
 			// tiles, that is a hidden subset.
-			for rtiMask, values := range sets {
+			for rtiMask, valuesMask := range sets {
 				// break the tile indicies bitmask out into separate indicies
-				var tileIndices []uint8
-				for rti := uint8(0); rti < 9; rti++ {
-					if rtiMask&(1<<rti) == 0 {
-						continue
-					}
-					tileIndices = append(tileIndices, rti)
-				}
+				tileIndices := MaskBits[rtiMask]
 
-				if len(values) != len(tileIndices) {
+				valuesCount := len(MaskBits[valuesMask])
+				if valuesCount != len(tileIndices) {
 					// not a hidden subset
 					continue
-				}
-
-				var valuesMask Tile
-				for _, v := range values {
-					valuesMask |= 1 << v // v is still one less than the actual number we're dealing with
 				}
 
 				// 2.2 Remove all other possible values from the candidate tiles.
@@ -765,34 +755,25 @@ func (b *Board) algoHiddenSubset(changes []uint8) bool {
 
 			// 2. Group the values together which have the same candidate tiles.
 			// We basically reverse the valueTileIndices list.
-			// sets is a map of a set of indices (as a bit mask) to the values in that set.
-			// E.G. `0b001000010 => [1,3]` means that tiles 2 & 7 are both the only
+			// sets is a map of a set of indices (as a bit mask) to a bit mask of the
+			// values in that set.
+			// E.G. `0b001000010 => 0b000000101` means that tiles 2 & 7 are both the only
 			// candidates for values 1 & 3.
-			sets := map[uint16][]uint8{}
+			sets := make(map[uint16]Tile, 9)
 			for v, rtiMask := range valueTileIndices {
-				sets[rtiMask] = append(sets[rtiMask], uint8(v))
+				sets[rtiMask] |= 1 << uint8(v)
 			}
 
 			// 2.1 If the number of grouped values is the same as the number of candidate
 			// tiles, that is a hidden subset.
-			for rtiMask, values := range sets {
+			for rtiMask, valuesMask := range sets {
 				// break the tile indicies bitmask out into separate indicies
-				var tileIndices []uint8
-				for rti := uint8(0); rti < 9; rti++ {
-					if rtiMask&(1<<rti) == 0 {
-						continue
-					}
-					tileIndices = append(tileIndices, rti)
-				}
+				tileIndices := MaskBits[rtiMask]
 
-				if len(values) != len(tileIndices) {
+				valuesCount := len(MaskBits[valuesMask])
+				if valuesCount != len(tileIndices) {
 					// not a hidden subset
 					continue
-				}
-
-				var valuesMask Tile
-				for _, v := range values {
-					valuesMask |= 1 << v // v is still one less than the actual number we're dealing with
 				}
 
 				// 2.2 Remove all other possible values from the candidate tiles.
@@ -827,34 +808,25 @@ func (b *Board) algoHiddenSubset(changes []uint8) bool {
 
 			// 2. Group the values together which have the same candidate tiles.
 			// We basically reverse the valueTileIndices list.
-			// sets is a map of a set of indices (as a bit mask) to the values in that set.
-			// E.G. `0b001000010 => [1,3]` means that tiles 2 & 7 are both the only
+			// sets is a map of a set of indices (as a bit mask) to a bit mask of the
+			// values in that set.
+			// E.G. `0b001000010 => 0b000000101` means that tiles 2 & 7 are both the only
 			// candidates for values 1 & 3.
-			sets := map[uint16][]uint8{}
+			sets := make(map[uint16]Tile, 9)
 			for v, ctiMask := range valueTileIndices {
-				sets[ctiMask] = append(sets[ctiMask], uint8(v))
+				sets[ctiMask] |= 1 << uint8(v)
 			}
 
 			// 2.1 If the number of grouped values is the same as the number of candidate
 			// tiles, that is a hidden subset.
-			for ctiMask, values := range sets {
+			for ctiMask, valuesMask := range sets {
 				// break the tile indicies bitmask out into separate indicies
-				var tileIndices []uint8
-				for cti := uint8(0); cti < 9; cti++ {
-					if ctiMask&(1<<cti) == 0 {
-						continue
-					}
-					tileIndices = append(tileIndices, cti)
-				}
+				tileIndices := MaskBits[ctiMask]
 
-				if len(values) != len(tileIndices) {
+				valuesCount := len(MaskBits[valuesMask])
+				if valuesCount != len(tileIndices) {
 					// not a hidden subset
 					continue
-				}
-
-				var valuesMask Tile
-				for _, v := range values {
-					valuesMask |= 1 << v // v is still one less than the actual number we're dealing with
 				}
 
 				// 2.2 Remove all other possible values from the candidate tiles.
