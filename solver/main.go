@@ -213,27 +213,41 @@ func (b *Board) Changes() []uint8 {
 }
 
 func (b *Board) evaluateAlgorithms() bool {
-	changes := b.Changes()
-	b.ClearChanges()
-
-	if !b.algoKnownValueElimination(changes) {
-		return false
+	type algoFunc func([]uint8) bool
+	algoFuncs := []algoFunc{
+		b.algoKnownValueElimination,
+		b.algoOnePossibleTile,
+		b.algoOnlyRow,
+		b.algoNakedSubset,
+		b.algoHiddenSubset,
 	}
 
-	if !b.algoOnePossibleTile(changes) {
-		return false
-	}
+	cs := b.changeSet
+AlgorithmsLoop:
+	for b.HasChanges() {
+		for _, af := range algoFuncs {
+			changes := b.Changes()
+			b.ClearChanges()
+			if !af(changes) {
+				return false
+			}
 
-	if !b.algoOnlyRow(changes) {
-		return false
-	}
+			if b.HasChanges() {
+				// add any changes just made to the backed-up changeset since the next algo
+				// hasn't seen them yet.
+				cs[0] |= b.changeSet[0]
+				cs[1] |= b.changeSet[1]
+				cs[2] |= b.changeSet[2]
 
-	if !b.algoNakedSubset(changes) {
-		return false
-	}
-
-	if !b.algoHiddenSubset(changes) {
-		return false
+				// restart from the first algorithm
+				continue AlgorithmsLoop
+			}
+			// no changes, restore the change set for the next algo
+			b.changeSet = cs
+		}
+		// we made it through all the algorithms with no changes
+		b.ClearChanges()
+		break
 	}
 
 	return true
