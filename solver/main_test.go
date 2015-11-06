@@ -1,11 +1,19 @@
 package main
 
 import (
+	//"os"
+	//"runtime/pprof"
 	"strings"
 	"testing"
 )
 
 func BenchmarkSet(b *testing.B) {
+	//f, _ := os.Create("profile")
+	//defer f.Close()
+	//pprof.StartCPUProfile(f)
+	//defer pprof.StopCPUProfile()
+	//defer pprof.WriteHeapProfile(f)
+
 	boardReader1 := strings.NewReader(`_ 8 _ _ 6 _ _ _ _
 5 4 _ _ _ 7 _ 3 _
 _ _ _ 1 _ _ 8 6 7
