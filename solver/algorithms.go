@@ -1,12 +1,25 @@
 package main
 
 type Algorithm interface {
+	Name() string
 	EvaluateChanges(*Board, []uint8) bool
+	Stats() *AlgorithmStats
+}
+
+type AlgorithmStats struct {
+	Calls   uint
+	Changes uint
 }
 
 // algoKnownValueElimination looks for tiles which have a known value. If any
 // are found, remove that value as a possibility from its neighbors.
-type algoKnownValueElimination struct{}
+type algoKnownValueElimination struct {
+	AlgoStats AlgorithmStats
+}
+
+func (a algoKnownValueElimination) Name() string { return "algoKnownValueElimination" }
+
+func (a *algoKnownValueElimination) Stats() *AlgorithmStats { return &a.AlgoStats }
 
 func (a algoKnownValueElimination) EvaluateChanges(b *Board, changes []uint8) bool {
 	for _, ti := range changes {
@@ -63,7 +76,13 @@ func (a algoKnownValueElimination) EvaluateChanges(b *Board, changes []uint8) bo
 
 // algoOnePossibleTile scans each set of neighbors for any values which have
 // only one possible tile.
-type algoOnePossibleTile struct{}
+type algoOnePossibleTile struct {
+	AlgoStats AlgorithmStats
+}
+
+func (a algoOnePossibleTile) Name() string { return "algoOnePossibleTile" }
+
+func (a *algoOnePossibleTile) Stats() *AlgorithmStats { return &a.AlgoStats }
 
 func (a algoOnePossibleTile) EvaluateChanges(b *Board, changes []uint8) bool {
 	var regionsSeen uint16
@@ -185,7 +204,13 @@ func (a algoOnePossibleTile) EvaluateChanges(b *Board, changes []uint8) bool {
 // algoOnlyRow checks if there is only a single row or column within a region
 // which can hold a value. If so, it eliminates the value from the
 // possibilities within the same row/column of neighboring regions.
-type algoOnlyRow struct{}
+type algoOnlyRow struct {
+	AlgoStats AlgorithmStats
+}
+
+func (a algoOnlyRow) Name() string { return "algoOnlyRow" }
+
+func (a *algoOnlyRow) Stats() *AlgorithmStats { return &a.AlgoStats }
 
 func (a algoOnlyRow) EvaluateChanges(b *Board, changes []uint8) bool {
 	var regionsSeen uint16
@@ -295,7 +320,13 @@ func (a algoOnlyRow) EvaluateChanges(b *Board, changes []uint8) bool {
 //
 // https://www.kristanix.com/sudokuepic/sudoku-solving-techniques.php "Naked Subset"
 //
-type algoNakedSubset struct{}
+type algoNakedSubset struct {
+	AlgoStats AlgorithmStats
+}
+
+func (a algoNakedSubset) Name() string { return "algoNakedSubset" }
+
+func (a *algoNakedSubset) Stats() *AlgorithmStats { return &a.AlgoStats }
 
 func (a algoNakedSubset) EvaluateChanges(b *Board, changes []uint8) bool {
 	var regionsSeen uint16
@@ -433,7 +464,13 @@ func (a algoNakedSubset) EvaluateChanges(b *Board, changes []uint8) bool {
 // algoHiddenSubset finds all subsets which have only the same number of possible tiles as the number of possible values within the set.
 // Think of 2 tiles with possiblities [1,4,7] and [1,4,9], where these are the only to tiles to contain possibilities for 1 & 4. Because of that, we can exempt 7 & 9 from the possibilities of these 2 tiles.
 // Likewise for [1,4,7,9],[1,3,4,7],[1,2,4,7], if no other tile has 1, 4, or 7, we can set all 3 tiles to [1,4,7].
-type algoHiddenSubset struct{}
+type algoHiddenSubset struct {
+	AlgoStats AlgorithmStats
+}
+
+func (a algoHiddenSubset) Name() string { return "algoHiddenSubset" }
+
+func (a *algoHiddenSubset) Stats() *AlgorithmStats { return &a.AlgoStats }
 
 func (a algoHiddenSubset) EvaluateChanges(b *Board, changes []uint8) bool {
 	// the algorithm works like this:

@@ -59,7 +59,8 @@ type Board struct {
 	// x=0,y=1, index 19 is x=1,y=2, and so forth.
 	Tiles [9 * 9]Tile
 
-	Algorithms []Algorithm
+	Algorithms      []Algorithm
+	activeAlgorithm Algorithm
 
 	// changeSet is a bit mask representing which tiles have changed.
 	// Each row of regions is a uint32 (27 tiles, so 5 bytes unused).
@@ -176,11 +177,11 @@ func NewBoard() Board {
 			tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
 		},
 		Algorithms: []Algorithm{
-			algoKnownValueElimination{},
-			algoOnePossibleTile{},
-			algoOnlyRow{},
-			algoNakedSubset{},
-			algoHiddenSubset{},
+			&algoKnownValueElimination{},
+			&algoOnePossibleTile{},
+			&algoOnlyRow{},
+			&algoNakedSubset{},
+			&algoHiddenSubset{},
 		},
 	}
 }
@@ -224,6 +225,10 @@ func (b *Board) set(ti uint8, t Tile) bool {
 		return true
 	}
 
+	if b.activeAlgorithm != nil {
+		b.activeAlgorithm.Stats().Changes++
+	}
+
 	b.Tiles[ti] = t
 	b.changeSet[ti/27] |= 1 << (ti % 27)
 
@@ -251,9 +256,13 @@ AlgorithmsLoop:
 		for _, a := range b.Algorithms {
 			changes := b.changes()
 			b.clearChanges()
+
+			b.activeAlgorithm = a
+			a.Stats().Calls++
 			if !a.EvaluateChanges(b, changes) {
 				return false
 			}
+			b.activeAlgorithm = nil
 
 			if b.hasChanges() {
 				// add any changes just made to the backed-up changeset since the next algo
@@ -429,17 +438,21 @@ func main() {
 	b.ReadFrom(os.Stdin)
 	fmt.Printf("%s", b.Art())
 
-	if b.Solved() {
-		fmt.Printf("Solved!\n")
-		os.Exit(0)
-	}
-
-	fmt.Printf("Guessing\n")
-	if !b.Solve() {
-		fmt.Printf("Can't guess!\n")
-		os.Exit(1)
+	if !b.Solved() {
+		fmt.Printf("Guessing\n")
+		if !b.Solve() {
+			fmt.Printf("Can't guess!\n")
+			os.Exit(1)
+		}
 	}
 	fmt.Printf("%s", b.Art())
 	fmt.Printf("Solved!\n")
+
+	fmt.Printf("Stats:\n")
+	fmt.Printf("  %-30s %8s %8s\n", "Algorithm", "Calls", "Changes")
+	for _, a := range b.Algorithms {
+		fmt.Printf("  %-30s %8d %8d\n", a.Name(), a.Stats().Calls, a.Stats().Changes)
+	}
+
 	os.Exit(0)
 }
