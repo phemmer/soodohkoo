@@ -1,8 +1,14 @@
 package main
 
+type Algorithm interface {
+	EvaluateChanges(*Board, []uint8) bool
+}
+
 // algoKnownValueElimination looks for tiles which have a known value. If any
 // are found, remove that value as a possibility from its neighbors.
-func (b *Board) algoKnownValueElimination(changes []uint8) bool {
+type algoKnownValueElimination struct{}
+
+func (a algoKnownValueElimination) EvaluateChanges(b *Board, changes []uint8) bool {
 	for _, ti := range changes {
 		t := b.Tiles[ti]
 		if !t.isKnown() {
@@ -21,7 +27,7 @@ func (b *Board) algoKnownValueElimination(changes []uint8) bool {
 				// skip ourself
 				continue
 			}
-			if !b.set(nti, b.Tiles[nti]&^t) {
+			if !b.set(nti, ^t) {
 				// invalid board configuration
 				return false
 			}
@@ -33,7 +39,7 @@ func (b *Board) algoKnownValueElimination(changes []uint8) bool {
 				// skip ourself
 				continue
 			}
-			if !b.set(nti, b.Tiles[nti]&^t) {
+			if !b.set(nti, ^t) {
 				// invalid board configuration
 				return false
 			}
@@ -45,7 +51,7 @@ func (b *Board) algoKnownValueElimination(changes []uint8) bool {
 				// skip ourself
 				continue
 			}
-			if !b.set(nti, b.Tiles[nti]&^t) {
+			if !b.set(nti, ^t) {
 				// invalid board configuration
 				return false
 			}
@@ -57,7 +63,9 @@ func (b *Board) algoKnownValueElimination(changes []uint8) bool {
 
 // algoOnePossibleTile scans each set of neighbors for any values which have
 // only one possible tile.
-func (b *Board) algoOnePossibleTile(changes []uint8) bool {
+type algoOnePossibleTile struct{}
+
+func (a algoOnePossibleTile) EvaluateChanges(b *Board, changes []uint8) bool {
 	var regionsSeen uint16
 	var rowsSeen uint16
 	var columnsSeen uint16
@@ -177,7 +185,9 @@ func (b *Board) algoOnePossibleTile(changes []uint8) bool {
 // algoOnlyRow checks if there is only a single row or column within a region
 // which can hold a value. If so, it eliminates the value from the
 // possibilities within the same row/column of neighboring regions.
-func (b *Board) algoOnlyRow(changes []uint8) bool {
+type algoOnlyRow struct{}
+
+func (a algoOnlyRow) EvaluateChanges(b *Board, changes []uint8) bool {
 	var regionsSeen uint16
 	for _, ti := range changes {
 		// skip any regions we've already seen this round
@@ -226,7 +236,7 @@ func (b *Board) algoOnlyRow(changes []uint8) bool {
 					// skip our region
 					continue
 				}
-				if !b.set(nti, b.Tiles[nti]&^v) {
+				if !b.set(nti, ^v) {
 					// invalid board configuration
 					return false
 				}
@@ -267,7 +277,7 @@ func (b *Board) algoOnlyRow(changes []uint8) bool {
 					// skip our region
 					continue
 				}
-				if !b.set(nti, b.Tiles[nti]&^v) {
+				if !b.set(nti, ^v) {
 					// invalid board configuration
 					return false
 				}
@@ -285,7 +295,9 @@ func (b *Board) algoOnlyRow(changes []uint8) bool {
 //
 // https://www.kristanix.com/sudokuepic/sudoku-solving-techniques.php "Naked Subset"
 //
-func (b *Board) algoNakedSubset(changes []uint8) bool {
+type algoNakedSubset struct{}
+
+func (a algoNakedSubset) EvaluateChanges(b *Board, changes []uint8) bool {
 	var regionsSeen uint16
 	var rowsSeen uint16
 	var columnsSeen uint16
@@ -326,7 +338,7 @@ func (b *Board) algoNakedSubset(changes []uint8) bool {
 					}
 					if nt&t != 0 {
 						// this tile has some of the possibilities, remove them
-						if !b.set(nti, nt&^t) {
+						if !b.set(nti, ^t) {
 							return false
 						}
 					}
@@ -366,7 +378,7 @@ func (b *Board) algoNakedSubset(changes []uint8) bool {
 					}
 					if nt&t != 0 {
 						// this tile has some of the possibilities, remove them
-						if !b.set(nti, nt&^t) {
+						if !b.set(nti, ^t) {
 							return false
 						}
 					}
@@ -406,7 +418,7 @@ func (b *Board) algoNakedSubset(changes []uint8) bool {
 					}
 					if nt&t != 0 {
 						// this tile has some of the possibilities, remove them
-						if !b.set(nti, nt&^t) {
+						if !b.set(nti, ^t) {
 							return false
 						}
 					}
@@ -421,7 +433,9 @@ func (b *Board) algoNakedSubset(changes []uint8) bool {
 // algoHiddenSubset finds all subsets which have only the same number of possible tiles as the number of possible values within the set.
 // Think of 2 tiles with possiblities [1,4,7] and [1,4,9], where these are the only to tiles to contain possibilities for 1 & 4. Because of that, we can exempt 7 & 9 from the possibilities of these 2 tiles.
 // Likewise for [1,4,7,9],[1,3,4,7],[1,2,4,7], if no other tile has 1, 4, or 7, we can set all 3 tiles to [1,4,7].
-func (b *Board) algoHiddenSubset(changes []uint8) bool {
+type algoHiddenSubset struct{}
+
+func (a algoHiddenSubset) EvaluateChanges(b *Board, changes []uint8) bool {
 	// the algorithm works like this:
 	// 1. Iterate over the values 1-9
 	// 1.1. Find each tile which can hold that value.

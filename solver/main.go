@@ -59,6 +59,8 @@ type Board struct {
 	// x=0,y=1, index 19 is x=1,y=2, and so forth.
 	Tiles [9 * 9]Tile
 
+	Algorithms []Algorithm
+
 	// changeSet is a bit mask representing which tiles have changed.
 	// Each row of regions is a uint32 (27 tiles, so 5 bytes unused).
 	changeSet [3]uint32
@@ -161,17 +163,26 @@ var MaskBits [512][]uint8 = func() (mbs [512][]uint8) {
 }()
 
 func NewBoard() Board {
-	return Board{Tiles: [81]Tile{
-		tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
-		tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
-		tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
-		tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
-		tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
-		tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
-		tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
-		tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
-		tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
-	}}
+	return Board{
+		Tiles: [81]Tile{
+			tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
+			tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
+			tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
+			tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
+			tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
+			tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
+			tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
+			tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
+			tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny, tAny,
+		},
+		Algorithms: []Algorithm{
+			algoKnownValueElimination{},
+			algoOnePossibleTile{},
+			algoOnlyRow{},
+			algoNakedSubset{},
+			algoHiddenSubset{},
+		},
+	}
 }
 
 // Set tries to set the given index to the given Tile value, and then evaluates
@@ -223,15 +234,6 @@ func (b *Board) set(ti uint8, t Tile) bool {
 // have changed since the last time evaluateAlgorithms was called.
 // The algorithms are evaluated in a loop until none of them make a change.
 func (b *Board) evaluateAlgorithms() bool {
-	type algoFunc func([]uint8) bool
-	algoFuncs := []algoFunc{
-		b.algoKnownValueElimination,
-		b.algoOnePossibleTile,
-		b.algoOnlyRow,
-		b.algoNakedSubset,
-		b.algoHiddenSubset,
-	}
-
 	// This is designed such that any time an algorithms makes a change, we go back
 	// to the first algorithm in the list. This is so that we let the cheap
 	// algorithms do as much as they can, and we call the expensive ones as little
@@ -246,10 +248,10 @@ func (b *Board) evaluateAlgorithms() bool {
 	cs := b.changeSet
 AlgorithmsLoop:
 	for b.hasChanges() {
-		for _, af := range algoFuncs {
+		for _, a := range b.Algorithms {
 			changes := b.changes()
 			b.clearChanges()
-			if !af(changes) {
+			if !a.EvaluateChanges(b, changes) {
 				return false
 			}
 
