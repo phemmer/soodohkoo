@@ -60,8 +60,9 @@ type Board struct {
 	// x=0,y=1, index 19 is x=1,y=2, and so forth.
 	Tiles [9 * 9]Tile
 
-	Algorithms      []Algorithm
-	activeAlgorithm Algorithm
+	Algorithms           []Algorithm
+	activeAlgorithmStats *AlgorithmStats
+	guessStats           *AlgorithmStats
 
 	// changeSet is a bit mask representing which tiles have changed.
 	// Each row of regions is a uint32 (27 tiles, so 5 bytes unused).
@@ -184,6 +185,7 @@ func NewBoard() Board {
 			&algoNakedSubset{},
 			&algoHiddenSubset{},
 		},
+		guessStats: &AlgorithmStats{},
 	}
 }
 
@@ -226,8 +228,8 @@ func (b *Board) set(ti uint8, t Tile) bool {
 		return true
 	}
 
-	if b.activeAlgorithm != nil {
-		b.activeAlgorithm.Stats().Changes++
+	if b.activeAlgorithmStats != nil {
+		b.activeAlgorithmStats.Changes++
 	}
 
 	b.Tiles[ti] = t
@@ -240,6 +242,10 @@ func (b *Board) set(ti uint8, t Tile) bool {
 // have changed since the last time evaluateAlgorithms was called.
 // The algorithms are evaluated in a loop until none of them make a change.
 func (b *Board) evaluateAlgorithms() bool {
+	// back this up in case we're recursing
+	activeAlgorithmStats := b.activeAlgorithmStats
+	defer func() { b.activeAlgorithmStats = activeAlgorithmStats }()
+
 	// This is designed such that any time an algorithms makes a change, we go back
 	// to the first algorithm in the list. This is so that we let the cheap
 	// algorithms do as much as they can, and we call the expensive ones as little
@@ -258,12 +264,12 @@ AlgorithmsLoop:
 			changes := b.changes()
 			b.clearChanges()
 
-			b.activeAlgorithm = a
+			b.activeAlgorithmStats = a.Stats()
 			a.Stats().Calls++
 			tStart := time.Now()
 			ok := a.EvaluateChanges(b, changes)
 			a.Stats().Duration += time.Now().Sub(tStart)
-			b.activeAlgorithm = nil
+			b.activeAlgorithmStats = nil
 			if !ok {
 				return false
 			}
@@ -331,9 +337,16 @@ func (b *Board) Solved() bool {
 	return true
 }
 
-// Solve tries to guess the the remaining unknown values on the board.
+// Guess tries to guess the the remaining unknown values on the board.
 // If all guesses result in an invalid board, false it returned.
-func (b *Board) Solve() bool {
+func (b *Board) Guess() bool {
+	b.guessStats.Calls++
+	b.activeAlgorithmStats = b.guessStats
+	tStart := time.Now()
+	defer func() {
+		b.guessStats.Duration += time.Now().Sub(tStart)
+	}()
+
 	// first look for the tile with the least amount of possible values
 	uti := uint8(255)
 	utPossibilityCount := uint8(255)
@@ -363,22 +376,29 @@ func (b *Board) Solve() bool {
 	// now try guessing a value
 	for _, v := range MaskBits[ut] {
 		t := Tile(1 << v)
+		b.guessStats.Duration += time.Now().Sub(tStart) // pause timer
 		if !b.Set(uti, t) {
 			// this value is invalid
 			if !b.Set(uti, ^t) {
 				// the board is invalid
+				tStart = time.Now()
 				*b = b0
 				return false
 			}
+			tStart = time.Now()
 			continue
 		}
+		tStart = time.Now()
 		if b.Solved() {
 			return true
 		}
 		// still have other tiles to guess
-		if b.Solve() {
+		b.guessStats.Duration += time.Now().Sub(tStart) // pause timer
+		if b.Guess() {
+			tStart = time.Now()
 			return true
 		}
+		tStart = time.Now()
 		// invalid board
 		// reset and try the next possible value for this tile
 		*b = b0
@@ -444,7 +464,7 @@ func main() {
 
 	if !b.Solved() {
 		fmt.Printf("Guessing\n")
-		if !b.Solve() {
+		if !b.Guess() {
 			fmt.Printf("Can't guess!\n")
 			os.Exit(1)
 		}
@@ -458,6 +478,8 @@ func main() {
 		stats := a.Stats()
 		fmt.Printf("  %-30s %8d %8d %14d\n", a.Name(), stats.Calls, stats.Changes, stats.Duration)
 	}
+	stats := b.guessStats
+	fmt.Printf("  %-30s %8d %8d %14d\n", "guesser", stats.Calls, stats.Changes, stats.Duration)
 
 	os.Exit(0)
 }
