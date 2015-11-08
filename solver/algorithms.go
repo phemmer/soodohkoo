@@ -1,5 +1,7 @@
 package main
 
+import "time"
+
 type Algorithm interface {
 	Name() string
 	EvaluateChanges(*Board, []uint8) bool
@@ -7,8 +9,9 @@ type Algorithm interface {
 }
 
 type AlgorithmStats struct {
-	Calls   uint
-	Changes uint
+	Calls    uint
+	Changes  uint
+	Duration time.Duration
 }
 
 // algoKnownValueElimination looks for tiles which have a known value. If any

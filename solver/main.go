@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 )
 
 // Tile represents a sudoku tile, and the possible values it may hold.
@@ -259,10 +260,13 @@ AlgorithmsLoop:
 
 			b.activeAlgorithm = a
 			a.Stats().Calls++
-			if !a.EvaluateChanges(b, changes) {
+			tStart := time.Now()
+			ok := a.EvaluateChanges(b, changes)
+			a.Stats().Duration += time.Now().Sub(tStart)
+			b.activeAlgorithm = nil
+			if !ok {
 				return false
 			}
-			b.activeAlgorithm = nil
 
 			if b.hasChanges() {
 				// add any changes just made to the backed-up changeset since the next algo
@@ -449,9 +453,10 @@ func main() {
 	fmt.Printf("Solved!\n")
 
 	fmt.Printf("Stats:\n")
-	fmt.Printf("  %-30s %8s %8s\n", "Algorithm", "Calls", "Changes")
+	fmt.Printf("  %-30s %8s %8s %14s\n", "Algorithm", "Calls", "Changes", "Duration (ns)")
 	for _, a := range b.Algorithms {
-		fmt.Printf("  %-30s %8d %8d\n", a.Name(), a.Stats().Calls, a.Stats().Changes)
+		stats := a.Stats()
+		fmt.Printf("  %-30s %8d %8d %14d\n", a.Name(), stats.Calls, stats.Changes, stats.Duration)
 	}
 
 	os.Exit(0)
