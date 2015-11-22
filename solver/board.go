@@ -8,9 +8,9 @@ import (
 )
 
 // Tile represents a sudoku tile, and the possible values it may hold.
-// The value is a 9-bit mask (5 bits unused), with bit 0 indicating whether the
-// tile can hold the digit 1, through bit 8 indicating whether the tile can hold
-// the digit 9.
+// The value is a 9-bit mask (uint16 with 5 bits unused), with bit 0 indicating
+// whether the tile can hold the digit 1, through bit 8 indicating whether the
+// tile can hold the digit 9.
 type Tile uint16
 
 // tAny is a tile which holds any possible value (1-9).
@@ -59,12 +59,17 @@ type Board struct {
 	// x=0,y=1, index 19 is x=1,y=2, and so forth.
 	Tiles [9 * 9]Tile
 
-	Algorithms           []Algorithm
+	// Algorithms is a list of algorithms to use when solving the board.
+	Algorithms []Algorithm
+	// activeAlgorithmStats is a pointer the the AlgorithmStats for the algorithm
+	// which is currently running.
 	activeAlgorithmStats *AlgorithmStats
-	guessStats           *AlgorithmStats
+	// guessStats tracks the AlgorithmStats for the guesser.
+	guessStats *AlgorithmStats
 
 	// changeSet is a bit mask representing which tiles have changed.
-	// Each row of regions is a uint32 (27 tiles, so 5 bytes unused).
+	// Each row of regions is a uint32 (27 tiles per region-row, so 5 bytes
+	// unused).
 	changeSet [3]uint32
 
 	// changesBase is an array used as the backing store for the slice returned by
@@ -164,6 +169,7 @@ var MaskBits [512][]uint8 = func() (mbs [512][]uint8) {
 	return
 }()
 
+// NewBoard creates a new board with all tiles unknown.
 func NewBoard() Board {
 	return Board{
 		Tiles: [81]Tile{
@@ -242,8 +248,7 @@ func (b *Board) set(ti uint8, t Tile) bool {
 // The algorithms are evaluated in a loop until none of them make a change.
 func (b *Board) evaluateAlgorithms() bool {
 	// back this up in case we're recursing
-	activeAlgorithmStats := b.activeAlgorithmStats
-	defer func() { b.activeAlgorithmStats = activeAlgorithmStats }()
+	defer func(s *AlgorithmStats) { b.activeAlgorithmStats = s }(b.activeAlgorithmStats)
 
 	// This is designed such that any time an algorithms makes a change, we go back
 	// to the first algorithm in the list. This is so that we let the cheap
@@ -325,17 +330,6 @@ func (b *Board) changes() []uint8 {
 	return changes
 }
 
-// Solved indicates whether all tiles have a known value.
-func (b *Board) Solved() bool {
-	for ti := uint8(0); ti < 9*9; ti++ {
-		t := b.Tiles[ti]
-		if !t.isKnown() {
-			return false
-		}
-	}
-	return true
-}
-
 // guess tries to guess the the remaining unknown values on the board.
 // If all guesses result in an invalid board, false it returned.
 func (b *Board) guess() bool {
@@ -408,6 +402,19 @@ func (b *Board) guess() bool {
 	return false
 }
 
+// Solved indicates whether all tiles have a known value.
+func (b *Board) Solved() bool {
+	for ti := uint8(0); ti < 9*9; ti++ {
+		t := b.Tiles[ti]
+		if !t.isKnown() {
+			return false
+		}
+	}
+	return true
+}
+
+// Solve tries to solve the board. If the board has no solution, false is
+// returned.
 func (b *Board) Solve() bool {
 	if !b.evaluateAlgorithms() {
 		return false

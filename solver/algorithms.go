@@ -464,9 +464,13 @@ func (a algoNakedSubset) EvaluateChanges(b *Board, changes []uint8) bool {
 	return true
 }
 
-// algoHiddenSubset finds all subsets which have only the same number of possible tiles as the number of possible values within the set.
-// Think of 2 tiles with possiblities [1,4,7] and [1,4,9], where these are the only to tiles to contain possibilities for 1 & 4. Because of that, we can exempt 7 & 9 from the possibilities of these 2 tiles.
-// Likewise for [1,4,7,9],[1,3,4,7],[1,2,4,7], if no other tile has 1, 4, or 7, we can set all 3 tiles to [1,4,7].
+// algoHiddenSubset finds all subsets which have only the same number of
+// possible tiles as the number of possible values within the set.
+// Think of 2 tiles with possiblities [1,4,7] and [1,4,9], where these are the
+// only to tiles to contain possibilities for 1 & 4. Because of that, we can
+// exempt 7 & 9 from the possibilities of these 2 tiles.
+// Likewise for [1,4,7,9],[1,3,4,7],[1,2,4,7], if no other tile has 1, 4, or 7,
+// we can set all 3 tiles to [1,4,7].
 type algoHiddenSubset struct {
 	AlgoStats AlgorithmStats
 }
