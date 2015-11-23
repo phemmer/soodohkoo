@@ -57,21 +57,21 @@ func mainSolveReader(input io.Reader, showStats bool) ([]byte, error) {
 		return nil, fmt.Errorf("invalid board: no solution")
 	}
 
-	outa := b.Art()
-	out := outa[:]
+	buf := bytes.NewBuffer(nil)
+	fmt.Fprintf(buf, "%s", b.Art())
 
 	if showStats {
-		out = append(out, []byte(fmt.Sprintf("Stats:\n"))...)
-		out = append(out, []byte(fmt.Sprintf("  %-30s %8s %8s %14s\n", "Algorithm", "Calls", "Changes", "Duration (ns)"))...)
+		fmt.Fprintf(buf, "Stats:\n")
+		fmt.Fprintf(buf, "  %-30s %8s %8s %14s\n", "Algorithm", "Calls", "Changes", "Duration (ns)")
 		for _, a := range b.Algorithms {
 			stats := a.Stats()
-			out = append(out, []byte(fmt.Sprintf("  %-30s %8d %8d %14d\n", a.Name(), stats.Calls, stats.Changes, stats.Duration))...)
+			fmt.Fprintf(buf, "  %-30s %8d %8d %14d\n", a.Name(), stats.Calls, stats.Changes, stats.Duration)
 		}
 		stats := b.guessStats
-		out = append(out, []byte(fmt.Sprintf("  %-30s %8d %8d %14d\n", "guesser", stats.Calls, stats.Changes, stats.Duration))...)
+		fmt.Fprintf(buf, "  %-30s %8d %8d %14d\n", "guesser", stats.Calls, stats.Changes, stats.Duration)
 	}
 
-	return out, nil
+	return buf.Bytes(), nil
 }
 
 func mainSolveOne(showStats bool) error {
