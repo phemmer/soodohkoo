@@ -7,76 +7,6 @@ import (
 	"time"
 )
 
-// Tile represents a sudoku tile, and the possible values it may hold.
-// The value is a 9-bit mask (uint16 with 5 bits unused), with bit 0 indicating
-// whether the tile can hold the digit 1, through bit 8 indicating whether the
-// tile can hold the digit 9.
-type Tile uint16
-
-// tAny is a tile which holds any possible value (1-9).
-const tAny = Tile((1 << 9) - 1)
-
-// byteToTileMap is a mapping of ASCII characters to their Tile value.
-var byteToTileMap = map[byte]Tile{
-	'1': 1 << 0, // 0b000000001
-	'2': 1 << 1, // 0b000000010
-	'3': 1 << 2, // 0b000000100
-	'4': 1 << 3, // 0b000001000
-	'5': 1 << 4, // 0b000010000
-	'6': 1 << 5, // 0b000100000
-	'7': 1 << 6, // 0b001000000
-	'8': 1 << 7, // 0b010000000
-	'9': 1 << 8, // 0b100000000
-	'_': tAny,   // 0b111111111
-}
-
-// isKnown indicates whether the tile only has a single possible value.
-func (t Tile) isKnown() bool {
-	// http://graphics.stanford.edu/~seander/bithacks.html#DetermineIfPowerOf2
-	return (t & (t - 1)) == 0
-}
-
-// Num returns the number held by a tile. If the tile is not known (holds
-// multiple possible values), 0 is returned.
-func (t Tile) Num() uint8 {
-	if !t.isKnown() {
-		return 0
-	}
-	// http://graphics.stanford.edu/~seander/bithacks.html#IntegerLogDeBruijn
-	lookupTable := [32]uint8{
-		0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8,
-		31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9,
-	}
-	//TODO adjust the table to remove the <<1
-	// the table is also larger than we need
-	// it should also be global so it's not redeclared
-	return lookupTable[(uint32(t<<1)*0x077CB531)>>27]
-}
-
-type Board struct {
-	// Tiles holds a 9x9 grid of the tiles on the board.
-	// The tiles are stored serially by row. Index 0 is x=0,y=0, index 9 is
-	// x=0,y=1, index 19 is x=1,y=2, and so forth.
-	Tiles [9 * 9]Tile
-
-	// Algorithms is a list of algorithms to use when solving the board.
-	Algorithms []Algorithm
-	// activeAlgorithmStats is a pointer the the AlgorithmStats for the algorithm
-	// which is currently running.
-	activeAlgorithmStats *AlgorithmStats
-	// guessStats tracks the AlgorithmStats for the guesser.
-	guessStats *AlgorithmStats
-
-	// changeSet is a bit mask representing which tiles have changed.
-	// Each row of regions is a uint32 (27 tiles per region-row, so 5 bytes
-	// unused).
-	changeSet [3]uint32
-
-	// changesBase is an array used as the backing store for the slice returned by
-	// changes(). This is to reduce heap allocations.
-	changesBase [9 * 9]uint8
-}
-
 // xyToIndex converts board x,y coordinates into an index.
 func xyToIndex(x, y uint8) (idx uint8) {
 	return y*9 + x
@@ -87,11 +17,9 @@ func indexToXY(idx uint8) (x, y uint8) {
 	return idx % 9, idx / 9
 }
 
-//TODO bench indexToX/indexToY
-
-// indexToRegionIndex converts the index of a tile within a board, to the index
+// tileIndexToRegionIndex converts the index of a tile within a board, to the index
 // of the region within the board.
-func indexToRegionIndex(idx uint8) uint8 {
+func tileIndexToRegionIndex(idx uint8) uint8 {
 	return idx/3%3 + idx/(9*3)*3
 }
 
@@ -169,6 +97,76 @@ var MaskBits [512][]uint8 = func() (mbs [512][]uint8) {
 	return
 }()
 
+// Tile represents a sudoku tile, and the possible values it may hold.
+// The value is a 9-bit mask (uint16 with 5 bits unused), with bit 0 indicating
+// whether the tile can hold the digit 1, through bit 8 indicating whether the
+// tile can hold the digit 9.
+type Tile uint16
+
+// tAny is a tile which holds any possible value (1-9).
+const tAny = Tile((1 << 9) - 1)
+
+// byteToTileMap is a mapping of ASCII characters to their Tile value.
+var byteToTileMap = map[byte]Tile{
+	'1': 1 << 0, // 0b000000001
+	'2': 1 << 1, // 0b000000010
+	'3': 1 << 2, // 0b000000100
+	'4': 1 << 3, // 0b000001000
+	'5': 1 << 4, // 0b000010000
+	'6': 1 << 5, // 0b000100000
+	'7': 1 << 6, // 0b001000000
+	'8': 1 << 7, // 0b010000000
+	'9': 1 << 8, // 0b100000000
+	'_': tAny,   // 0b111111111
+}
+
+// isKnown indicates whether the tile only has a single possible value.
+func (t Tile) isKnown() bool {
+	// http://graphics.stanford.edu/~seander/bithacks.html#DetermineIfPowerOf2
+	return (t & (t - 1)) == 0
+}
+
+// Num returns the number held by a tile. If the tile is not known (holds
+// multiple possible values), 0 is returned.
+func (t Tile) Num() uint8 {
+	if !t.isKnown() {
+		return 0
+	}
+	// http://graphics.stanford.edu/~seander/bithacks.html#IntegerLogDeBruijn
+	lookupTable := [32]uint8{
+		0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8,
+		31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9,
+	}
+	//TODO adjust the table to remove the <<1
+	// the table is also larger than we need
+	// it should also be global so it's not redeclared
+	return lookupTable[(uint32(t<<1)*0x077CB531)>>27]
+}
+
+type Board struct {
+	// Tiles holds a 9x9 grid of the tiles on the board.
+	// The tiles are stored serially by row. Index 0 is x=0,y=0, index 9 is
+	// x=0,y=1, index 19 is x=1,y=2, and so forth.
+	Tiles [9 * 9]Tile
+
+	// Algorithms is a list of algorithms to use when solving the board.
+	Algorithms []Algorithm
+	// activeAlgorithmStats is a pointer the the AlgorithmStats for the algorithm
+	// which is currently running.
+	activeAlgorithmStats *AlgorithmStats
+	// guessStats tracks the AlgorithmStats for the guesser.
+	guessStats *AlgorithmStats
+
+	// changeSet is a bit mask representing which tiles have changed.
+	// Each row of regions is a uint32 (27 tiles per region-row, so 5 bytes
+	// unused).
+	changeSet [3]uint32
+
+	// changesBase is an array used as the backing store for the slice returned by
+	// changes(). This is to reduce heap allocations.
+	changesBase [9 * 9]uint8
+}
+
 // NewBoard creates a new board with all tiles unknown.
 func NewBoard() Board {
 	return Board{
@@ -243,6 +241,37 @@ func (b *Board) set(ti uint8, t Tile) bool {
 	return true
 }
 
+// hasChanges indicates whether any tiles have been changed since the last call
+// to evaluateAlgorithms.
+func (b *Board) hasChanges() bool {
+	return b.changeSet[0] != 0 || b.changeSet[1] != 0 || b.changeSet[2] != 0
+}
+
+// clearChanges resets the change list used by hasChanges and changes.
+func (b *Board) clearChanges() {
+	b.changeSet[0] = 0
+	b.changeSet[1] = 0
+	b.changeSet[2] = 0
+}
+
+// changes returns a slice of tile indices for all the tiles which have changed
+// since the last call to evaluateAlgorithms.
+// Note: as an optimization, all returned values share the same underlying
+// storage. This means that each call to changes invalidates the previous return
+// value.
+func (b *Board) changes() []uint8 {
+	changes := b.changesBase[:0]
+	for rri, rrm := range b.changeSet {
+		for i := uint8(0); i < 27; i++ {
+			if rrm&1 != 0 {
+				changes = append(changes, uint8(rri)*27+i)
+			}
+			rrm = rrm >> 1
+		}
+	}
+	return changes
+}
+
 // evaluateAlgorithms evalutes all the algorithms against all the tiles that
 // have changed since the last time evaluateAlgorithms was called.
 // The algorithms are evaluated in a loop until none of them make a change.
@@ -297,37 +326,6 @@ AlgorithmsLoop:
 	}
 
 	return true
-}
-
-// hasChanges indicates whether any tiles have been changed since the last call
-// to evaluateAlgorithms.
-func (b *Board) hasChanges() bool {
-	return b.changeSet[0] != 0 || b.changeSet[1] != 0 || b.changeSet[2] != 0
-}
-
-// clearChanges resets the change list used by hasChanges and changes.
-func (b *Board) clearChanges() {
-	b.changeSet[0] = 0
-	b.changeSet[1] = 0
-	b.changeSet[2] = 0
-}
-
-// changes returns a slice of tile indices for all the tiles which have changed
-// since the last call to evaluateAlgorithms.
-// Note: as an optimization, all returned values share the same underlying
-// storage. This means that each call to changes invalidates the previous return
-// value.
-func (b *Board) changes() []uint8 {
-	changes := b.changesBase[:0]
-	for rri, rrm := range b.changeSet {
-		for i := uint8(0); i < 27; i++ {
-			if rrm&1 != 0 {
-				changes = append(changes, uint8(rri)*27+i)
-			}
-			rrm = rrm >> 1
-		}
-	}
-	return changes
 }
 
 // guess tries to guess the the remaining unknown values on the board.

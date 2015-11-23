@@ -92,7 +92,7 @@ func (b *Board) dropRandomTile(rng *rand.Rand) bool {
 		// score is the number of possible values in neighboring tiles
 		score := 0
 
-		rgnIdx := indexToRegionIndex(ti)
+		rgnIdx := tileIndexToRegionIndex(ti)
 		for _, nti := range RegionIndices[rgnIdx][:] {
 			score += len(MaskBits[b.Tiles[nti]])
 		}

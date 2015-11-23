@@ -32,7 +32,7 @@ func (a algoKnownValueElimination) EvaluateChanges(b *Board, changes []uint8) bo
 		}
 
 		x, y := indexToXY(ti)
-		rgnIdx := indexToRegionIndex(ti)
+		rgnIdx := tileIndexToRegionIndex(ti)
 		rgnIndices := RegionIndices[rgnIdx][:]
 		rowIndices := RowIndices[y][:]
 		colIndices := ColumnIndices[x][:]
@@ -94,7 +94,7 @@ func (a algoOnePossibleTile) EvaluateChanges(b *Board, changes []uint8) bool {
 
 	for _, ti := range changes {
 		x, y := indexToXY(ti)
-		rgnIdx := indexToRegionIndex(ti)
+		rgnIdx := tileIndexToRegionIndex(ti)
 
 		// Iterate over the region.
 		// But first, see if we've already done so for this specific region.
@@ -219,7 +219,7 @@ func (a algoOnlyRow) EvaluateChanges(b *Board, changes []uint8) bool {
 	var regionsSeen uint16
 	for _, ti := range changes {
 		// skip any regions we've already seen this round
-		rgnIdx := indexToRegionIndex(ti)
+		rgnIdx := tileIndexToRegionIndex(ti)
 		regionMask := uint16(1 << rgnIdx)
 		if regionsSeen&regionMask != 0 {
 			continue
@@ -260,7 +260,7 @@ func (a algoOnlyRow) EvaluateChanges(b *Board, changes []uint8) bool {
 
 			// iterate over the candidate row, excluding the value from tiles in other regions
 			for _, nti := range RowIndices[tcRow][:] {
-				if indexToRegionIndex(nti) == rgnIdx {
+				if tileIndexToRegionIndex(nti) == rgnIdx {
 					// skip our region
 					continue
 				}
@@ -301,7 +301,7 @@ func (a algoOnlyRow) EvaluateChanges(b *Board, changes []uint8) bool {
 			}
 
 			for _, nti := range ColumnIndices[tcCol][:] {
-				if indexToRegionIndex(nti) == rgnIdx {
+				if tileIndexToRegionIndex(nti) == rgnIdx {
 					// skip our region
 					continue
 				}
@@ -337,7 +337,7 @@ func (a algoNakedSubset) EvaluateChanges(b *Board, changes []uint8) bool {
 	var columnsSeen uint16
 
 	for _, ti := range changes {
-		rgnIdx := indexToRegionIndex(ti)
+		rgnIdx := tileIndexToRegionIndex(ti)
 		x, y := indexToXY(ti)
 
 		// first scan the region
@@ -494,7 +494,7 @@ func (a algoHiddenSubset) EvaluateChanges(b *Board, changes []uint8) bool {
 
 	for _, ti := range changes {
 		x, y := indexToXY(ti)
-		rgnIdx := indexToRegionIndex(ti)
+		rgnIdx := tileIndexToRegionIndex(ti)
 
 		// iterate over the region
 		regionMask := uint16(1 << rgnIdx)
