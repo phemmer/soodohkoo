@@ -5,34 +5,55 @@ import (
 	"flag"
 	"io"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 )
 
-func runMain(args ...string) int {
+func runMain(t *testing.T, input io.Reader, args ...string) (int, *bytes.Buffer) {
 	defer func(fs *flag.FlagSet) { flag.CommandLine = fs }(flag.CommandLine)
 	defer func(args []string) { os.Args = args }(os.Args)
 	flag.CommandLine = flag.NewFlagSet("soodohkoo", 0)
 	os.Args = append([]string{"soodohkoo"}, args...)
-	return mainMain()
-}
 
-func TestMainSolve(t *testing.T) {
+	wg := sync.WaitGroup{}
+
+	if input == nil {
+		input = bytes.NewBuffer(nil)
+	}
 	defer func(f *os.File) { os.Stdin = f }(os.Stdin)
-	defer func(f *os.File) { os.Stdout = f }(os.Stdout)
-	defer func(f *os.File) { os.Stderr = f }(os.Stderr)
-
-	var stdinW *os.File
-	var err error
-	os.Stdin, stdinW, err = os.Pipe()
+	stdinR, stdinW, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("error creating pipe: %s", err)
 	}
-	defer os.Stdin.Close()
+	defer stdinR.Close()
+	defer stdinW.Close()
+	os.Stdin = stdinR
+	wg.Add(1)
+	go func() { io.Copy(stdinW, input); wg.Done() }()
 
-	go func() {
-		defer stdinW.Close()
-		_, err := stdinW.WriteString(`_ 8 _ _ 6 _ _ _ _
+	defer func(f *os.File) { os.Stdout = f }(os.Stdout)
+	stdoutR, stdoutW, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("error creating pipe: %s", err)
+	}
+	defer stdoutW.Close()
+	defer stdoutR.Close()
+	os.Stdout = stdoutW
+	stdoutBuf := bytes.NewBuffer(nil)
+	wg.Add(1)
+	go func() { io.Copy(stdoutBuf, stdoutR); wg.Done() }()
+
+	status := mainMain()
+	stdinR.Close()  // unblock STDIN io.Copy()
+	stdoutW.Close() // unblock STDOUT io.Copy()
+	wg.Wait()
+
+	return status, stdoutBuf
+}
+
+func TestMainSolve(t *testing.T) {
+	input := strings.NewReader(`_ 8 _ _ 6 _ _ _ _
 5 4 _ _ _ 7 _ 3 _
 _ _ _ 1 _ _ 8 6 7
 _ _ 9 _ 3 _ _ _ 6
@@ -42,70 +63,31 @@ _ _ 5 _ _ _ 3 _ _
 _ 2 _ 4 _ _ _ 7 9
 _ _ _ _ 2 _ _ 8 _
 `)
-		if err != nil {
-			t.Errorf("error writing to pipe: %s", err)
-		}
-	}()
-
-	var stdoutR *os.File
-	stdoutR, os.Stdout, err = os.Pipe()
-	if err != nil {
-		t.Fatalf("error creating pipe: %s", err)
-	}
-	stdoutBuf := bytes.NewBuffer(nil)
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go func() { io.Copy(stdoutBuf, stdoutR); wg.Done() }()
-
-	// Suppress the stats noise.
-	// We might test it one day, but for now we don't care.
-	//os.Stderr, _ = os.OpenFile(os.DevNull, os.O_WRONLY, 0)
-
-	status := runMain("-stats")
+	status, output := runMain(t, input, "-stats")
 	if status != 0 {
 		t.Errorf("mainSolve() returned %d, expected %d", status, 0)
-	}
-	os.Stdout.Close() // unblock the STDOUT io.Copy()
-
-	wg.Wait()
-	b := NewBoard()
-	_, err = b.ReadFrom(stdoutBuf)
-	if err != nil {
-		t.Errorf("error reading output board: %s", err)
 	}
 
 	//TODO check stats?
 
+	b := NewBoard()
+	_, err := b.ReadFrom(output)
+	if err != nil {
+		t.Errorf("error reading output board: %s", err)
+	}
 	if !b.Solved() {
 		t.Errorf("output board is not solved")
 	}
 }
 
 func TestMainGenerate(t *testing.T) {
-	defer func(f *os.File) { os.Stdout = f }(os.Stdout)
-
-	var err error
-	var stdoutR *os.File
-	stdoutR, os.Stdout, err = os.Pipe()
-	if err != nil {
-		t.Fatalf("error creating pipe: %s", err)
-	}
-	stdoutBuf := bytes.NewBuffer(nil)
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go func() { io.Copy(stdoutBuf, stdoutR); wg.Done() }()
-
-	defer func(d int) { difficulties["easy"] = d }(difficulties["easy"])
-	difficulties["easy"] = 4 // to speed up the test
-	status := runMain("-generate=easy")
+	status, output := runMain(t, nil, "-generate=easy")
 	if status != 0 {
 		t.Errorf("mainGenerate() returned %d, expected %d", status, 0)
 	}
-	os.Stdout.Close() // unblock the STDOUT io.Copy()
 
-	wg.Wait()
 	b := NewBoard()
-	_, err = b.ReadFrom(stdoutBuf)
+	_, err := b.ReadFrom(output)
 	if err != nil {
 		t.Errorf("error reading output board: %s", err)
 	}
@@ -122,28 +104,13 @@ func TestMainGenerate(t *testing.T) {
 }
 
 func TestMainGenerate_difficultyInt(t *testing.T) {
-	defer func(f *os.File) { os.Stdout = f }(os.Stdout)
-
-	var err error
-	var stdoutR *os.File
-	stdoutR, os.Stdout, err = os.Pipe()
-	if err != nil {
-		t.Fatalf("error creating pipe: %s", err)
-	}
-	stdoutBuf := bytes.NewBuffer(nil)
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go func() { io.Copy(stdoutBuf, stdoutR); wg.Done() }()
-
-	status := runMain("-generate=3")
+	status, output := runMain(t, nil, "-generate=3")
 	if status != 0 {
 		t.Errorf("mainGenerate() returned %d, expected %d", status, 0)
 	}
-	os.Stdout.Close() // unblock the STDOUT io.Copy()
 
-	wg.Wait()
 	b := NewBoard()
-	_, err = b.ReadFrom(stdoutBuf)
+	_, err := b.ReadFrom(output)
 	if err != nil {
 		t.Errorf("error reading output board: %s", err)
 	}
