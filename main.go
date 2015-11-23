@@ -58,7 +58,7 @@ func mainSolveReader(input io.Reader, showStats bool) ([]byte, error) {
 	}
 
 	buf := bytes.NewBuffer(nil)
-	fmt.Fprintf(buf, "%s", b.Art())
+	buf.Write(b.Art())
 
 	if showStats {
 		fmt.Fprintf(buf, "Stats:\n")
@@ -83,7 +83,7 @@ func mainSolveOne(showStats bool) error {
 	return err
 }
 
-type job struct {
+type streamJob struct {
 	bs  []byte
 	err error
 	wg  sync.WaitGroup
@@ -96,31 +96,34 @@ func mainSolveStream(showStats bool) error {
 	workerCount := runtime.GOMAXPROCS(-1)
 	errChan := make(chan error, workerCount)
 
-	workerJobs := make(chan *job, workerCount*4)
+	workerJobs := make(chan *streamJob, workerCount*4)
 	defer close(workerJobs)
 	for i := 0; i < workerCount; i++ {
 		wg.Add(1)
 		go func() {
-			for job := range workerJobs {
-				buf := bytes.NewBuffer(job.bs)
-				job.bs, job.err = mainSolveReader(buf, showStats)
-				job.wg.Done()
+			for streamJob := range workerJobs {
+				buf := bytes.NewBuffer(streamJob.bs)
+				streamJob.bs, streamJob.err = mainSolveReader(buf, showStats)
+				streamJob.wg.Done()
 			}
 			wg.Done()
 		}()
 	}
 
-	publisherJobs := make(chan *job, workerCount*8)
+	publisherJobs := make(chan *streamJob, workerCount*8)
 	defer close(publisherJobs)
 	wg.Add(1)
 	go func() {
-		for job := range publisherJobs {
-			job.wg.Wait()
-			if job.err != nil {
-				errChan <- job.err
+		for streamJob := range publisherJobs {
+			streamJob.wg.Wait()
+			if streamJob.err != nil {
+				errChan <- streamJob.err
 				break
 			}
-			fmt.Printf("%s", job.bs)
+			if _, err := os.Stdout.Write(streamJob.bs); err != nil {
+				errChan <- err
+				break
+			}
 		}
 		wg.Done()
 	}()
@@ -128,7 +131,7 @@ func mainSolveStream(showStats bool) error {
 	wg.Add(1)
 	go func() {
 		for {
-			job := &job{
+			job := &streamJob{
 				bs: make([]byte, 9*9*2),
 			}
 			_, err := io.ReadFull(os.Stdin, job.bs)

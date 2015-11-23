@@ -466,7 +466,7 @@ func (b *Board) Unmarshal(ba []byte) error {
 
 // Art generates a simple representation of the board, suitable for human
 // viewing.
-func (b Board) Art() [9 * 9 * 2]byte {
+func (b Board) Art() []byte {
 	var ba [9 * 9 * 2]byte
 	for y := uint8(0); y < 9; y++ {
 		rowStart := y * 9 * 2
@@ -481,5 +481,5 @@ func (b Board) Art() [9 * 9 * 2]byte {
 		}
 		ba[rowStart+8*2+1] = '\n'
 	}
-	return ba
+	return ba[:]
 }
