@@ -34,6 +34,8 @@ func (a algoGenerateShuffle) EvaluateChanges(b *Board, changes []uint8) bool {
 func NewRandomBoard(difficulty int) Board {
 	b := NewBoard()
 
+	// The board is deterministic by seed.
+	// Meaning the same seed always generates the same board.
 	seed := time.Now().UnixNano()
 	rng := rand.New(rand.NewSource(seed))
 
@@ -60,6 +62,7 @@ func NewRandomBoard(difficulty int) Board {
 	return b
 }
 
+// dropCandidate is a candidate tile for dropping from the board.
 type dropCandidate struct {
 	ti    uint8
 	score int
@@ -71,9 +74,9 @@ func (dcs dropCandidates) Less(i, j int) bool { return dcs[i].score < dcs[j].sco
 func (dcs dropCandidates) Swap(i, j int)      { dcs[i], dcs[j] = dcs[j], dcs[i] }
 func (dcs dropCandidates) Sort()              { sort.Sort(sort.Reverse(dcs)) }
 func (dcs *dropCandidates) Remove(i int)      { *dcs = append((*dcs)[:i], (*dcs)[i+1:]...) }
-func (dcs dropCandidates) Shuffle() {
+func (dcs dropCandidates) Shuffle(rng *rand.Rand) {
 	for i := len(dcs) - 1; i > 0; i-- {
-		j := rand.Intn(i + 1)
+		j := rng.Intn(i + 1)
 		dcs[i], dcs[j] = dcs[j], dcs[i]
 	}
 }
@@ -125,7 +128,7 @@ func (b *Board) dropRandomTile(rng *rand.Rand) bool {
 		dcs = append(dcs, dropCandidate{ti: ti, score: score})
 	}
 
-	dcs.Shuffle()
+	dcs.Shuffle(rng)
 	dcs.Sort()
 
 	for dcs.Len() > 0 {
