@@ -29,7 +29,8 @@ func mainMain() int {
 	case "solve":
 		err = mainSolve(*showStats)
 	case "solveStream":
-		for ; err == nil; err = mainSolve(*showStats) {
+		for err == nil {
+			err = mainSolve(*showStats)
 		}
 		if err == io.EOF {
 			err = nil
