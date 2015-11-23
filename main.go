@@ -94,6 +94,7 @@ func mainSolveStream(showStats bool) error {
 	defer wg.Wait()
 
 	workerCount := runtime.GOMAXPROCS(-1)
+	errChan := make(chan error, workerCount)
 
 	workerJobs := make(chan *job, workerCount*4)
 	defer close(workerJobs)
@@ -116,30 +117,39 @@ func mainSolveStream(showStats bool) error {
 		for job := range publisherJobs {
 			job.wg.Wait()
 			if job.err != nil {
-				fmt.Fprintf(os.Stderr, "%s\n", job.err)
-				os.Exit(1)
+				errChan <- job.err
+				break
 			}
 			fmt.Printf("%s", job.bs)
 		}
 		wg.Done()
 	}()
 
-	for {
-		job := &job{
-			bs: make([]byte, 9*9*2),
-		}
-		_, err := io.ReadFull(os.Stdin, job.bs)
-		if err == io.EOF {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
+	wg.Add(1)
+	go func() {
+		for {
+			job := &job{
+				bs: make([]byte, 9*9*2),
+			}
+			_, err := io.ReadFull(os.Stdin, job.bs)
+			if err == io.EOF {
+				errChan <- nil
+				break
+			}
+			if err != nil {
+				errChan <- err
+				break
+			}
 
-		job.wg.Add(1)
-		workerJobs <- job
-		publisherJobs <- job
-	}
+			job.wg.Add(1)
+			workerJobs <- job
+			publisherJobs <- job
+		}
+		wg.Done()
+	}()
+	defer os.Stdin.Close() // unblock the io.ReadFull and get the goroutine to shut down
+
+	return <-errChan
 }
 
 func mainGenerate(difficulty string) error {
