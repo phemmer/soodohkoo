@@ -114,38 +114,8 @@ func (a algoOnePossibleTile) EvaluateChanges(b *Board, changes []uint8) bool {
 		if regionsSeen&regionMask == 0 {
 			regionsSeen |= regionMask
 
-			rgnIndices := RegionIndices[rgnIdx][:]
-		OnePossibleTileRegionLoop:
-			for v := Tile(1); v < tAny; v = v << 1 {
-				//TODO this feels like there should be an optimized way to find which bits are set in only one of a set of numbers
-				tcIdx := uint8(255)
-				for _, nti := range rgnIndices {
-					nt := b.Tiles[nti]
-					if nt == v {
-						// this value already has been found
-						continue OnePossibleTileRegionLoop
-					}
-					if nt&v == 0 {
-						// not a possible tile
-						continue
-					}
-					// is a candidate
-					if tcIdx != 255 {
-						// this is the second candidate
-						continue OnePossibleTileRegionLoop
-					}
-					tcIdx = nti
-				}
-				if tcIdx == 255 {
-					// no possible tiles for this value
-					//TODO does this ever happen?
-					return false
-				}
-				if !b.set(tcIdx, v) {
-					// invalid board configuration
-					//TODO does this ever happen?
-					return false
-				}
+			if !a.evaluateChangesNS(b, RegionIndices[rgnIdx][:]) {
+				return false
 			}
 		}
 
@@ -155,29 +125,8 @@ func (a algoOnePossibleTile) EvaluateChanges(b *Board, changes []uint8) bool {
 		if rowsSeen&rowMask == 0 {
 			rowsSeen |= rowMask
 
-			rowIndices := RowIndices[y][:]
-		OnePossibleTileRowLoop:
-			for v := Tile(1); v < tAny; v = v << 1 {
-				tcIdx := uint8(255)
-				for _, nti := range rowIndices {
-					nt := b.Tiles[nti]
-					if nt == v {
-						continue OnePossibleTileRowLoop
-					}
-					if nt&v == 0 {
-						continue
-					}
-					if tcIdx != 255 {
-						continue OnePossibleTileRowLoop
-					}
-					tcIdx = nti
-				}
-				if tcIdx == 255 {
-					return false
-				}
-				if !b.set(tcIdx, v) {
-					return false
-				}
+			if !a.evaluateChangesNS(b, RowIndices[y][:]) {
+				return false
 			}
 		}
 
@@ -186,33 +135,47 @@ func (a algoOnePossibleTile) EvaluateChanges(b *Board, changes []uint8) bool {
 		if columnsSeen&columnMask == 0 {
 			columnsSeen |= columnMask
 
-			colIndices := ColumnIndices[x][:]
-		OnePossibleTileColumnLoop:
-			for v := Tile(1); v < tAny; v = v << 1 {
-				tcIdx := uint8(255)
-				for _, nti := range colIndices {
-					nt := b.Tiles[nti]
-					if nt == v {
-						continue OnePossibleTileColumnLoop
-					}
-					if nt&v == 0 {
-						continue
-					}
-					if tcIdx != 255 {
-						continue OnePossibleTileColumnLoop
-					}
-					tcIdx = nti
-				}
-				if tcIdx == 255 {
-					return false
-				}
-				if !b.set(tcIdx, v) {
-					return false
-				}
+			if !a.evaluateChangesNS(b, ColumnIndices[x][:]) {
+				return false
 			}
 		}
 	}
 
+	return true
+}
+
+// evaluateChangesNS evaluates the algorithm for the given neighbor set.
+func (a algoOnePossibleTile) evaluateChangesNS(b *Board, idcs []uint8) bool {
+ValueLoop:
+	for v := Tile(1); v < tAny; v = v << 1 {
+		//TODO this feels like there should be an optimized way to find which bits are set in only one of a set of numbers
+		ti := uint8(255)
+		for _, nti := range idcs {
+			nt := b.Tiles[nti]
+			if nt == v {
+				// this value already has been found
+				continue ValueLoop
+			}
+			if nt&v == 0 {
+				// not a possible tile
+				continue
+			}
+			// is a candidate
+			if ti != 255 {
+				// this is the second candidate
+				continue ValueLoop
+			}
+			ti = nti
+		}
+		if ti == 255 {
+			// no possible tiles for this value
+			return false
+		}
+		if !b.set(ti, v) {
+			// invalid board configuration
+			return false
+		}
+	}
 	return true
 }
 
@@ -357,38 +320,8 @@ func (a algoNakedSubset) EvaluateChanges(b *Board, changes []uint8) bool {
 		if regionsSeen&regionMask == 0 {
 			regionsSeen |= regionMask
 
-			rgnIndices := RegionIndices[rgnIdx][:]
-			rgnSetCounts := map[Tile]uint8{}
-			for _, nti := range rgnIndices {
-				nt := b.Tiles[nti]
-				if nt.isKnown() {
-					// Technically this is one such case. One possible value within the tile,
-					// and one tile with this possible set. But this is already handled by
-					// algoOnePossibleTile.
-					continue
-				}
-
-				rgnSetCounts[nt]++
-			}
-			for t, setCount := range rgnSetCounts {
-				possibilityCount := uint8(len(MaskBits[t]))
-				if possibilityCount != setCount {
-					continue
-				}
-				// if we're here, then we have a combination of N tiles with N possibilities.
-				for _, nti := range rgnIndices {
-					nt := b.Tiles[nti]
-					if nt == t {
-						// this is one of the N tiles
-						continue
-					}
-					if nt&t != 0 {
-						// this tile has some of the possibilities, remove them
-						if !b.set(nti, ^t) {
-							return false
-						}
-					}
-				}
+			if !a.evaluateChangesNS(b, RegionIndices[rgnIdx][:]) {
+				return false
 			}
 		}
 
@@ -397,38 +330,8 @@ func (a algoNakedSubset) EvaluateChanges(b *Board, changes []uint8) bool {
 		if rowsSeen&rowMask == 0 {
 			rowsSeen |= rowMask
 
-			rowIndices := RowIndices[y][:]
-			rowSetCounts := map[Tile]uint8{}
-			for _, nti := range rowIndices {
-				nt := b.Tiles[nti]
-				if nt.isKnown() {
-					// Technically this is one such case. One possible value within the tile,
-					// and one tile with this possible set. But as we already know the value we
-					// don't need to do anything.
-					continue
-				}
-
-				rowSetCounts[nt]++
-			}
-			for t, setCount := range rowSetCounts {
-				possibilityCount := uint8(len(MaskBits[t]))
-				if possibilityCount != setCount {
-					continue
-				}
-				// if we're here, then we have a combination of N tiles with N possibilities.
-				for _, nti := range rowIndices {
-					nt := b.Tiles[nti]
-					if nt == t {
-						// this is one of the N tiles
-						continue
-					}
-					if nt&t != 0 {
-						// this tile has some of the possibilities, remove them
-						if !b.set(nti, ^t) {
-							return false
-						}
-					}
-				}
+			if !a.evaluateChangesNS(b, RowIndices[y][:]) {
+				return false
 			}
 		}
 
@@ -437,37 +340,45 @@ func (a algoNakedSubset) EvaluateChanges(b *Board, changes []uint8) bool {
 		if columnsSeen&columnMask == 0 {
 			columnsSeen |= columnMask
 
-			colIndices := ColumnIndices[x][:]
-			colSetCounts := map[Tile]uint8{}
-			for _, nti := range colIndices {
-				nt := b.Tiles[nti]
-				if nt.isKnown() {
-					// Technically this is one such case. One possible value within the tile,
-					// and one tile with this possible set. But as we already know the value we
-					// don't need to do anything.
-					continue
-				}
-
-				colSetCounts[nt]++
+			if !a.evaluateChangesNS(b, ColumnIndices[x][:]) {
+				return false
 			}
-			for t, setCount := range colSetCounts {
-				possibilityCount := uint8(len(MaskBits[t]))
-				if possibilityCount != setCount {
-					continue
-				}
-				// if we're here, then we have a combination of N tiles with N possibilities.
-				for _, nti := range colIndices {
-					nt := b.Tiles[nti]
-					if nt == t {
-						// this is one of the N tiles
-						continue
-					}
-					if nt&t != 0 {
-						// this tile has some of the possibilities, remove them
-						if !b.set(nti, ^t) {
-							return false
-						}
-					}
+		}
+	}
+
+	return true
+}
+
+// evaluateChangesNS evaluates the algorithm for the given neighbor set.
+func (a algoNakedSubset) evaluateChangesNS(b *Board, idcs []uint8) bool {
+	setCounts := map[Tile]uint8{}
+	for _, nti := range idcs {
+		nt := b.Tiles[nti]
+		if nt.isKnown() {
+			// Technically this is one such case. One possible value within the tile,
+			// and one tile with this possible set. But this is already handled by
+			// algoOnePossibleTile.
+			continue
+		}
+
+		setCounts[nt]++
+	}
+	for t, setCount := range setCounts {
+		possibilityCount := uint8(len(MaskBits[t]))
+		if possibilityCount != setCount {
+			continue
+		}
+		// if we're here, then we have a combination of N tiles with N possibilities.
+		for _, nti := range idcs {
+			nt := b.Tiles[nti]
+			if nt == t {
+				// this is one of the N tiles
+				continue
+			}
+			if nt&t != 0 {
+				// this tile has some of the possibilities, remove them
+				if !b.set(nti, ^t) {
+					return false
 				}
 			}
 		}
@@ -513,51 +424,8 @@ func (a algoHiddenSubset) EvaluateChanges(b *Board, changes []uint8) bool {
 		if regionsSeen&regionMask == 0 {
 			regionsSeen |= regionMask
 
-			// valueTileIndices is a list of values to a bit mask of tile indices which hold that value.
-			// E.G. `3 => 0b001000010` means that the value 3 is a possibility for tiles 2 & 7.
-			valueTileIndices := [9]uint16{}
-			rgnIndices := RegionIndices[rgnIdx][:]
-			// 1. Iterate over the values 1-9
-			for v := uint8(0); v < 9; v++ { // v is one less than the actual number we're dealing with
-				// 1.1. Find each tile which can hold that value.
-				for i, nti := range rgnIndices {
-					nt := b.Tiles[nti]
-					if nt&(1<<v) == 0 {
-						continue
-					}
-					valueTileIndices[v] |= 1 << uint16(i)
-				}
-			}
-
-			// 2. Group the values together which have the same candidate tiles.
-			// We basically reverse the valueTileIndices list.
-			// sets is a map of a set of indices (as a bit mask) to a bit mask of the
-			// values in that set.
-			// E.G. `0b001000010 => 0b000000101` means that tiles 2 & 7 are both the only
-			// candidates for values 1 & 3.
-			sets := make(map[uint16]Tile, 9)
-			for v, rtiMask := range valueTileIndices[:] {
-				sets[rtiMask] |= 1 << uint8(v)
-			}
-
-			// 2.1 If the number of grouped values is the same as the number of candidate
-			// tiles, that is a hidden subset.
-			for rtiMask, valuesMask := range sets {
-				// break the tile indicies bitmask out into separate indicies
-				tileIndices := MaskBits[rtiMask]
-
-				valuesCount := len(MaskBits[valuesMask])
-				if valuesCount != len(tileIndices) {
-					// not a hidden subset
-					continue
-				}
-
-				// 2.2 Remove all other possible values from the candidate tiles.
-				for _, rti := range tileIndices {
-					if !b.set(rgnIndices[rti], valuesMask) {
-						return false
-					}
-				}
+			if !a.evaluateChangesNS(b, RegionIndices[rgnIdx][:]) {
+				return false
 			}
 		}
 
@@ -566,51 +434,8 @@ func (a algoHiddenSubset) EvaluateChanges(b *Board, changes []uint8) bool {
 		if rowsSeen&rowMask == 0 {
 			rowsSeen |= rowMask
 
-			// valueTileIndices is a list of values to a bit mask of tile indices which hold that value.
-			// E.G. `3 => 0b001000010` means that the value 3 is a possibility for tiles 2 & 7.
-			valueTileIndices := [9]uint16{}
-			rowIndices := RowIndices[y][:]
-			// 1. Iterate over the values 1-9
-			for v := uint8(0); v < 9; v++ { // v is one less than the actual number we're dealing with
-				// 1.1. Find each tile which can hold that value.
-				for i, nti := range rowIndices {
-					nt := b.Tiles[nti]
-					if nt&(1<<v) == 0 {
-						continue
-					}
-					valueTileIndices[v] |= 1 << uint16(i)
-				}
-			}
-
-			// 2. Group the values together which have the same candidate tiles.
-			// We basically reverse the valueTileIndices list.
-			// sets is a map of a set of indices (as a bit mask) to a bit mask of the
-			// values in that set.
-			// E.G. `0b001000010 => 0b000000101` means that tiles 2 & 7 are both the only
-			// candidates for values 1 & 3.
-			sets := make(map[uint16]Tile, 9)
-			for v, rtiMask := range valueTileIndices {
-				sets[rtiMask] |= 1 << uint8(v)
-			}
-
-			// 2.1 If the number of grouped values is the same as the number of candidate
-			// tiles, that is a hidden subset.
-			for rtiMask, valuesMask := range sets {
-				// break the tile indicies bitmask out into separate indicies
-				tileIndices := MaskBits[rtiMask]
-
-				valuesCount := len(MaskBits[valuesMask])
-				if valuesCount != len(tileIndices) {
-					// not a hidden subset
-					continue
-				}
-
-				// 2.2 Remove all other possible values from the candidate tiles.
-				for _, rti := range tileIndices {
-					if !b.set(rowIndices[rti], valuesMask) {
-						return false
-					}
-				}
+			if !a.evaluateChangesNS(b, RowIndices[y][:]) {
+				return false
 			}
 		}
 
@@ -619,53 +444,61 @@ func (a algoHiddenSubset) EvaluateChanges(b *Board, changes []uint8) bool {
 		if columnsSeen&colMask == 0 {
 			columnsSeen |= colMask
 
-			// valueTileIndices is a list of values to a bit mask of tile indices which hold that value.
-			// E.G. `3 => 0b001000010` means that the value 3 is a possibility for tiles 2 & 7.
-			valueTileIndices := [9]uint16{}
-			colIndices := ColumnIndices[x][:]
-			// 1. Iterate over the values 1-9
-			for v := uint8(0); v < 9; v++ { // v is one less than the actual number we're dealing with
-				// 1.1. Find each tile which can hold that value.
-				for i, nti := range colIndices {
-					nt := b.Tiles[nti]
-					if nt&(1<<v) == 0 {
-						continue
-					}
-					valueTileIndices[v] |= 1 << uint16(i)
-				}
-			}
-
-			// 2. Group the values together which have the same candidate tiles.
-			// We basically reverse the valueTileIndices list.
-			// sets is a map of a set of indices (as a bit mask) to a bit mask of the
-			// values in that set.
-			// E.G. `0b001000010 => 0b000000101` means that tiles 2 & 7 are both the only
-			// candidates for values 1 & 3.
-			sets := make(map[uint16]Tile, 9)
-			for v, ctiMask := range valueTileIndices {
-				sets[ctiMask] |= 1 << uint8(v)
-			}
-
-			// 2.1 If the number of grouped values is the same as the number of candidate
-			// tiles, that is a hidden subset.
-			for ctiMask, valuesMask := range sets {
-				// break the tile indicies bitmask out into separate indicies
-				tileIndices := MaskBits[ctiMask]
-
-				valuesCount := len(MaskBits[valuesMask])
-				if valuesCount != len(tileIndices) {
-					// not a hidden subset
-					continue
-				}
-
-				// 2.2 Remove all other possible values from the candidate tiles.
-				for _, cti := range tileIndices {
-					if !b.set(colIndices[cti], valuesMask) {
-						return false
-					}
-				}
+			if !a.evaluateChangesNS(b, ColumnIndices[x][:]) {
+				return false
 			}
 		}
 	}
+	return true
+}
+
+// evaluateChangesNS evaluates the algorithm for the given neighbor set.
+func (a algoHiddenSubset) evaluateChangesNS(b *Board, idcs []uint8) bool {
+	// valueTileIndices is a list of values to a bit mask of tile indices which hold that value.
+	// E.G. `3 => 0b001000010` means that the value 3 is a possibility for tiles 2 & 7.
+	valueTileIndices := [9]uint16{}
+	// 1. Iterate over the values 1-9
+	for v := uint8(0); v < 9; v++ { // v is one less than the actual number we're dealing with
+		// 1.1. Find each tile which can hold that value.
+		for i, nti := range idcs {
+			nt := b.Tiles[nti]
+			if nt&(1<<v) == 0 {
+				continue
+			}
+			valueTileIndices[v] |= 1 << uint16(i)
+		}
+	}
+
+	// 2. Group the values together which have the same candidate tiles.
+	// We basically reverse the valueTileIndices list.
+	// sets is a map of a set of indices (as a bit mask) to a bit mask of the
+	// values in that set.
+	// E.G. `0b001000010 => 0b000000101` means that tiles 2 & 7 are both the only
+	// candidates for values 1 & 3.
+	sets := make(map[uint16]Tile, 9)
+	for v, stiMask := range valueTileIndices[:] {
+		sets[stiMask] |= 1 << uint8(v)
+	}
+
+	// 2.1 If the number of grouped values is the same as the number of candidate
+	// tiles, that is a hidden subset.
+	for stiMask, valuesMask := range sets {
+		// break the tile indicies bitmask out into separate indicies
+		tileIndices := MaskBits[stiMask]
+
+		valuesCount := len(MaskBits[valuesMask])
+		if valuesCount != len(tileIndices) {
+			// not a hidden subset
+			continue
+		}
+
+		// 2.2 Remove all other possible values from the candidate tiles.
+		for _, sti := range tileIndices {
+			if !b.set(idcs[sti], valuesMask) {
+				return false
+			}
+		}
+	}
+
 	return true
 }
