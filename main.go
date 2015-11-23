@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 )
@@ -18,36 +19,43 @@ func main() {
 	os.Exit(mainMain())
 }
 func mainMain() int {
-	var mode string
-	flag.StringVar(&mode, "mode", "solve", "Operation mode {solve|generate}")
-	var difficulty string
-	flag.StringVar(&difficulty, "difficulty", "medium", "Difficulty of generated board {easy|medium|hard|insane|1-70}")
-	var showStats bool
-	flag.BoolVar(&showStats, "stats", false, "show solver statistics")
+	mode := flag.String("mode", "solve", "Operation mode {solve|solveStream|generate}")
+	difficulty := flag.String("difficulty", "medium", "Difficulty of generated board {easy|medium|hard|insane|1-70}")
+	showStats := flag.Bool("stats", false, "show solver statistics")
 	flag.Parse()
 
-	switch mode {
+	var err error
+	switch *mode {
 	case "solve":
-		return mainSolve(showStats)
+		err = mainSolve(*showStats)
+	case "solveStream":
+		for ; err == nil; err = mainSolve(*showStats) {
+		}
+		if err == io.EOF {
+			err = nil
+		}
 	case "generate":
-		return mainGenerate(difficulty)
+		err = mainGenerate(*difficulty)
 	default:
 		flag.Usage()
 		return 1
 	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s\n", err)
+		return 1
+	}
+	return 0
 }
 
-func mainSolve(showStats bool) int {
+func mainSolve(showStats bool) error {
 	b := NewBoard()
 	_, err := b.ReadFrom(os.Stdin)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "invalid board: %s\n", err)
-		return 1
+		return err
 	}
 
 	if !b.Solve() {
-		fmt.Fprintf(os.Stderr, "invalid board: no solution\n")
-		return 1
+		return fmt.Errorf("invalid board: no solution")
 	}
 
 	fmt.Printf("%s", b.Art())
@@ -63,23 +71,21 @@ func mainSolve(showStats bool) int {
 		fmt.Printf("  %-30s %8d %8d %14d\n", "guesser", stats.Calls, stats.Changes, stats.Duration)
 	}
 
-	return 0
+	return nil
 }
 
-func mainGenerate(difficulty string) int {
+func mainGenerate(difficulty string) error {
 	lvl := difficulties[difficulty]
 	if lvl == 0 {
 		// try and parse as an int.
 		var err error
 		lvl, err = strconv.Atoi(difficulty)
 		if err != nil || lvl < 0 {
-			fmt.Fprintf(os.Stderr, "Invalid difficulty level\n")
-			flag.Usage()
-			return 1
+			return fmt.Errorf("invalid difficulty level")
 		}
 	}
 
 	b := NewRandomBoard(lvl)
 	fmt.Printf("%s", b.Art())
-	return 0
+	return nil
 }

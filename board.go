@@ -422,12 +422,26 @@ func (b *Board) Solve() bool {
 
 // ReadFrom reads the board from the provided io.Reader. In addition to read
 // errors, if the provided board is invalid, an error will be returned.
+//
+// The input format of the board is:
+//  1 _ 3 _ _ 6 _ 8 _
+//  _ 5 _ _ 8 _ 1 2 _
+//  7 _ 9 1 _ 3 _ 5 6
+//  _ 3 _ _ 6 7 _ 9 _
+//  5 _ 7 8 _ _ _ 3 _
+//  8 _ 1 _ 3 _ 5 _ 7
+//  _ 4 _ _ 7 8 _ 1 _
+//  6 _ 8 _ _ 2 _ 4 _
+//  _ 1 2 _ 4 5 _ 7 8
 func (b *Board) ReadFrom(r io.Reader) (int64, error) {
 	var ba [9 * 9 * 2]byte
-	nr, err := io.ReadAtLeast(r, ba[:], len(ba)-1)
-	// io.ReadAtLeast() because we don't care about a trailing newline if it's there
+	nr, err := io.ReadFull(r, ba[:])
 	if err != nil {
-		return int64(nr), err
+		if err == io.EOF && nr == len(ba)-1 {
+			// The trailing newline is missing. This is acceptable
+		} else {
+			return int64(nr), err
+		}
 	}
 	for i := 0; i < len(ba); i += 2 {
 		x := uint8(i / 2 % 9)
@@ -438,7 +452,7 @@ func (b *Board) ReadFrom(r io.Reader) (int64, error) {
 			return int64(nr), errors.New("invalid byte")
 		}
 		if !b.set(ti, t) {
-			return int64(nr), fmt.Errorf("invalid board (offset=%d byte=%q)", i, []byte{ba[i]})
+			return int64(nr), fmt.Errorf("invalid board")
 		}
 	}
 
