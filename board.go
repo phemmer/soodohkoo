@@ -98,7 +98,7 @@ var MaskBits [512][]uint8 = func() (mbs [512][]uint8) {
 }()
 
 // Tile represents a sudoku tile, and the possible values it may hold.
-// The value is a 9-bit mask (uint16 with 5 bits unused), with bit 0 indicating
+// The value is a 9-bit mask (uint16 with 7 bits unused), with bit 0 indicating
 // whether the tile can hold the digit 1, through bit 8 indicating whether the
 // tile can hold the digit 9.
 type Tile uint16
