@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"strconv"
+	"sync"
 )
 
 var difficulties = map[string]int{
@@ -27,14 +29,9 @@ func mainMain() int {
 	var err error
 	switch *mode {
 	case "solve":
-		err = mainSolve(*showStats)
+		err = mainSolveOne(*showStats)
 	case "solveStream":
-		for err == nil {
-			err = mainSolve(*showStats)
-		}
-		if err == io.EOF {
-			err = nil
-		}
+		err = mainSolveStream(*showStats)
 	case "generate":
 		err = mainGenerate(*difficulty)
 	default:
@@ -48,31 +45,98 @@ func mainMain() int {
 	return 0
 }
 
-func mainSolve(showStats bool) error {
+func mainSolveReader(input io.Reader, showStats bool) ([]byte, error) {
 	b := NewBoard()
-	_, err := b.ReadFrom(os.Stdin)
+	_, err := b.ReadFrom(input)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if !b.Solve() {
-		return fmt.Errorf("invalid board: no solution")
+		return nil, fmt.Errorf("invalid board: no solution")
 	}
 
-	fmt.Printf("%s", b.Art())
+	outa := b.Art()
+	out := outa[:]
 
 	if showStats {
-		fmt.Printf("Stats:\n")
-		fmt.Printf("  %-30s %8s %8s %14s\n", "Algorithm", "Calls", "Changes", "Duration (ns)")
+		out = append(out, []byte(fmt.Sprintf("Stats:\n"))...)
+		out = append(out, []byte(fmt.Sprintf("  %-30s %8s %8s %14s\n", "Algorithm", "Calls", "Changes", "Duration (ns)"))...)
 		for _, a := range b.Algorithms {
 			stats := a.Stats()
-			fmt.Printf("  %-30s %8d %8d %14d\n", a.Name(), stats.Calls, stats.Changes, stats.Duration)
+			out = append(out, []byte(fmt.Sprintf("  %-30s %8d %8d %14d\n", a.Name(), stats.Calls, stats.Changes, stats.Duration))...)
 		}
 		stats := b.guessStats
-		fmt.Printf("  %-30s %8d %8d %14d\n", "guesser", stats.Calls, stats.Changes, stats.Duration)
+		out = append(out, []byte(fmt.Sprintf("  %-30s %8d %8d %14d\n", "guesser", stats.Calls, stats.Changes, stats.Duration))...)
 	}
 
-	return nil
+	return out, nil
+}
+
+func mainSolveOne(showStats bool) error {
+	out, err := mainSolveReader(os.Stdin, showStats)
+	if err != nil {
+		return err
+	}
+	_, err = os.Stdout.Write(out)
+	return err
+}
+
+type job struct {
+	bs  []byte
+	err error
+	wg  sync.WaitGroup
+}
+
+func mainSolveStream(showStats bool) error {
+	wg := sync.WaitGroup{}
+	defer wg.Wait()
+
+	workerJobs := make(chan *job, 30)
+	defer close(workerJobs)
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			for job := range workerJobs {
+				buf := bytes.NewBuffer(job.bs)
+				job.bs, job.err = mainSolveReader(buf, showStats)
+				job.wg.Done()
+			}
+			wg.Done()
+		}()
+	}
+
+	publisherJobs := make(chan *job, 60)
+	defer close(publisherJobs)
+	wg.Add(1)
+	go func() {
+		for job := range publisherJobs {
+			job.wg.Wait()
+			if job.err != nil {
+				fmt.Fprintf(os.Stderr, "%s\n", job.err)
+				os.Exit(1)
+			}
+			fmt.Printf("%s", job.bs)
+		}
+		wg.Done()
+	}()
+
+	for {
+		job := &job{
+			bs: make([]byte, 9*9*2),
+		}
+		_, err := io.ReadFull(os.Stdin, job.bs)
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+
+		job.wg.Add(1)
+		workerJobs <- job
+		publisherJobs <- job
+	}
 }
 
 func mainGenerate(difficulty string) error {

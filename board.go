@@ -444,20 +444,24 @@ func (b *Board) ReadFrom(r io.Reader) (int64, error) {
 			return int64(nr), err
 		}
 	}
+	return int64(nr), b.Unmarshal(ba[:])
+}
+
+func (b *Board) Unmarshal(ba []byte) error {
 	for i := 0; i < len(ba); i += 2 {
 		x := uint8(i / 2 % 9)
 		y := uint8(i / 2 / 9)
 		ti := xyToIndex(x, y)
 		t := byteToTileMap[ba[i]]
 		if t == 0 {
-			return int64(nr), errors.New("invalid byte")
+			return errors.New("invalid byte")
 		}
 		if !b.set(ti, t) {
-			return int64(nr), fmt.Errorf("invalid board")
+			return fmt.Errorf("invalid board")
 		}
 	}
 
-	return int64(nr), nil
+	return nil
 }
 
 // Art generates a simple representation of the board, suitable for human
