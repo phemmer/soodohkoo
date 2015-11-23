@@ -143,6 +143,7 @@ func (t Tile) Num() uint8 {
 	return lookupTable[(uint32(t<<1)*0x077CB531)>>27]
 }
 
+// Board represents a sudoku board.
 type Board struct {
 	// Tiles holds a 9x9 grid of the tiles on the board.
 	// The tiles are stored serially by row. Index 0 is x=0,y=0, index 9 is

@@ -2,15 +2,27 @@ package main
 
 import "time"
 
+// Algorithm is an interface for a tile value elimination algorithm.
 type Algorithm interface {
+	// Name returns the algorithm's display name.
 	Name() string
+	// EvaluateChanges is called when there are new changes for the algorithm to
+	// evaluate.
+	// The function is provided with the board, and a list of tile indices which
+	// have changed since the last time the function was called.
 	EvaluateChanges(*Board, []uint8) bool
+	// Stats returns a pointer to an AlgorithmStats object to be used for tracking
+	// statistics of the algorithm.
 	Stats() *AlgorithmStats
 }
 
+// AlgorithmStats tracks statistics about the performance of an algorithm.
 type AlgorithmStats struct {
-	Calls    uint
-	Changes  uint
+	// Calls is how many times the EvaluateChanges() was called.
+	Calls uint
+	// Changes is how many tiles were changed by the algorithm.
+	Changes uint
+	// Duration is the time spent within EvaluateChanges().
 	Duration time.Duration
 }
 

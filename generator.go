@@ -31,6 +31,10 @@ func (a algoGenerateShuffle) EvaluateChanges(b *Board, changes []uint8) bool {
 	return true
 }
 
+// NewRandomBoard generates a new Board of the given difficulty. Difficulty is
+// the number of tiles to set as unknown.
+// Note that the actual number of unknown tiles may be less than the number
+// requested if the algorithm can remove no further tiles.
 func NewRandomBoard(difficulty int) Board {
 	b := NewBoard()
 
