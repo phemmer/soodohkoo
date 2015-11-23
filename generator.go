@@ -6,6 +6,11 @@ import (
 	"time"
 )
 
+// algoGenerateShuffle isn't a real algorithm. It's instead used to shuffle
+// MaskBits.
+// The reason is that guess() picks the first value from a set in MaskBits. This
+// would result in a very non-random board. So we shuffle the MaskBits around
+// each loop through evaluateAlgorithms.
 type algoGenerateShuffle struct {
 	rand *rand.Rand
 }
@@ -15,12 +20,9 @@ func (a algoGenerateShuffle) Name() string { return "algoGenerateShuffle" }
 func (a algoGenerateShuffle) Stats() *AlgorithmStats { return &AlgorithmStats{} }
 
 func (a algoGenerateShuffle) EvaluateChanges(b *Board, changes []uint8) bool {
-	// guess() picks the first value from a set in MaskBits. This would result in a
-	// very non-random board. So we shuffle the MaskBits around each loop through
-	// evaluateAlgorithms.
 	// This is a little heavy as we're shuffling the entire MaskBits, when we
-	// really just need to shuffle a single set. But this won't be called often, so
-	// we go with simplicity.
+	// really just need to shuffle a single set (the one guess() is going to use).
+	// But this won't be called often, so we go with simplicity.
 	for _, mbs := range MaskBits[:] {
 		// Fisher–Yates shuffle.
 		for i := len(mbs) - 1; i > 0; i-- {
@@ -43,13 +45,8 @@ func NewRandomBoard(difficulty int) Board {
 	seed := time.Now().UnixNano()
 	rng := rand.New(rand.NewSource(seed))
 
-	algos := b.Algorithms
-	b.Algorithms = []Algorithm{
-		&algoKnownValueElimination{},
-		&algoOnePossibleTile{},
-		&algoOnlyRow{},
-		&algoGenerateShuffle{rng},
-	}
+	defer func(algos []Algorithm) { b.Algorithms = algos }(b.Algorithms)
+	b.Algorithms = append(b.Algorithms, &algoGenerateShuffle{rng})
 
 	b.Set(0, 1<<uint(rng.Intn(9)))
 	b.guess()
@@ -62,7 +59,6 @@ func NewRandomBoard(difficulty int) Board {
 		}
 	}
 
-	b.Algorithms = algos
 	return b
 }
 
