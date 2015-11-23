@@ -63,7 +63,7 @@ _ _ 5 _ _ _ 3 _ _
 _ 2 _ 4 _ _ _ 7 9
 _ _ _ _ 2 _ _ 8 _
 `)
-	status, output := runMain(t, input, "-stats")
+	status, output := runMain(t, input, "-mode=solve", "-stats")
 	if status != 0 {
 		t.Errorf("mainSolve() returned %d, expected %d", status, 0)
 	}
@@ -81,7 +81,7 @@ _ _ _ _ 2 _ _ 8 _
 }
 
 func TestMainGenerate(t *testing.T) {
-	status, output := runMain(t, nil, "-generate=easy")
+	status, output := runMain(t, nil, "-mode=generate", "-difficulty=easy")
 	if status != 0 {
 		t.Errorf("mainGenerate() returned %d, expected %d", status, 0)
 	}
@@ -104,7 +104,7 @@ func TestMainGenerate(t *testing.T) {
 }
 
 func TestMainGenerate_difficultyInt(t *testing.T) {
-	status, output := runMain(t, nil, "-generate=3")
+	status, output := runMain(t, nil, "-mode=generate", "-difficulty=3")
 	if status != 0 {
 		t.Errorf("mainGenerate() returned %d, expected %d", status, 0)
 	}

@@ -18,16 +18,23 @@ func main() {
 	os.Exit(mainMain())
 }
 func mainMain() int {
-	var generateDifficulty string
-	flag.StringVar(&generateDifficulty, "generate", "", "generate a board of the given difficulty {easy|medium|hard|insane|1-70}")
+	var mode string
+	flag.StringVar(&mode, "mode", "solve", "Operation mode {solve|generate}")
+	var difficulty string
+	flag.StringVar(&difficulty, "difficulty", "medium", "Difficulty of generated board {easy|medium|hard|insane|1-70}")
 	var showStats bool
 	flag.BoolVar(&showStats, "stats", false, "show solver statistics")
 	flag.Parse()
 
-	if generateDifficulty == "" {
+	switch mode {
+	case "solve":
 		return mainSolve(showStats)
+	case "generate":
+		return mainGenerate(difficulty)
+	default:
+		flag.Usage()
+		return 1
 	}
-	return mainGenerate(generateDifficulty)
 }
 
 func mainSolve(showStats bool) int {
@@ -67,7 +74,7 @@ func mainGenerate(difficulty string) int {
 		lvl, err = strconv.Atoi(difficulty)
 		if err != nil || lvl < 0 {
 			fmt.Fprintf(os.Stderr, "Invalid difficulty level\n")
-			flag.PrintDefaults()
+			flag.Usage()
 			return 1
 		}
 	}
