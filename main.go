@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"strconv"
 	"sync"
 )
@@ -92,9 +93,11 @@ func mainSolveStream(showStats bool) error {
 	wg := sync.WaitGroup{}
 	defer wg.Wait()
 
-	workerJobs := make(chan *job, 30)
+	workerCount := runtime.GOMAXPROCS(-1)
+
+	workerJobs := make(chan *job, workerCount*4)
 	defer close(workerJobs)
-	for i := 0; i < 10; i++ {
+	for i := 0; i < workerCount; i++ {
 		wg.Add(1)
 		go func() {
 			for job := range workerJobs {
@@ -106,7 +109,7 @@ func mainSolveStream(showStats bool) error {
 		}()
 	}
 
-	publisherJobs := make(chan *job, 60)
+	publisherJobs := make(chan *job, workerCount*8)
 	defer close(publisherJobs)
 	wg.Add(1)
 	go func() {
