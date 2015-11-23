@@ -69,7 +69,7 @@ type dropCandidates []dropCandidate
 func (dcs dropCandidates) Len() int           { return len(dcs) }
 func (dcs dropCandidates) Less(i, j int) bool { return dcs[i].score < dcs[j].score }
 func (dcs dropCandidates) Swap(i, j int)      { dcs[i], dcs[j] = dcs[j], dcs[i] }
-func (dcs dropCandidates) Sort()              { sort.Sort(dcs) }
+func (dcs dropCandidates) Sort()              { sort.Sort(sort.Reverse(dcs)) }
 func (dcs *dropCandidates) Remove(i int)      { *dcs = append((*dcs)[:i], (*dcs)[i+1:]...) }
 func (dcs dropCandidates) Shuffle() {
 	for i := len(dcs) - 1; i > 0; i-- {
@@ -89,20 +89,37 @@ func (b *Board) dropRandomTile(rng *rand.Rand) bool {
 		}
 		ti := uint8(ti)
 
-		// score is the number of possible values in neighboring tiles
+		// score is the preference to removing this tile
 		score := 0
 
+		// favor tiles with lots of known neighbors
 		rgnIdx := tileIndexToRegionIndex(ti)
 		for _, nti := range RegionIndices[rgnIdx][:] {
-			score += len(MaskBits[b.Tiles[nti]])
+			if b.Tiles[nti].isKnown() {
+				score++
+			}
 		}
-
 		colIdx, rowIdx := indexToXY(ti)
 		for _, nti := range RowIndices[rowIdx][:] {
-			score += len(MaskBits[b.Tiles[nti]])
+			if b.Tiles[nti].isKnown() {
+				score++
+			}
 		}
 		for _, nti := range ColumnIndices[colIdx][:] {
-			score += len(MaskBits[b.Tiles[nti]])
+			if b.Tiles[nti].isKnown() {
+				score++
+			}
+		}
+
+		// encourage diagonal symmetry
+		x, y := indexToXY(ti)
+		sti := xyToIndex(y, x) // flip over the up-left axis
+		if !b.Tiles[sti].isKnown() {
+			score += 3
+		}
+		sti = xyToIndex(8-y, 8-x) // flip over the up-right axis
+		if !b.Tiles[sti].isKnown() {
+			score += 3
 		}
 
 		dcs = append(dcs, dropCandidate{ti: ti, score: score})
