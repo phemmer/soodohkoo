@@ -23,13 +23,19 @@ func (a algoGenerateShuffle) EvaluateChanges(b *Board, changes []uint8) bool {
 	// This is a little heavy as we're shuffling the entire MaskBits, when we
 	// really just need to shuffle a single set (the one guess() is going to use).
 	// But this won't be called often, so we go with simplicity.
-	for _, mbs := range MaskBits[:] {
+	for n, nums := range MaskBits[:] {
+		// copy the slice so we don't mutate it in case a function up the stack is
+		// ranging across it.
+		numsCopy := make([]uint8, len(nums))
+		copy(numsCopy, nums)
 		// Fisher–Yates shuffle.
-		for i := len(mbs) - 1; i > 0; i-- {
+		for i := len(numsCopy) - 1; i > 0; i-- {
 			j := a.rand.Intn(i + 1)
-			mbs[i], mbs[j] = mbs[j], mbs[i]
+			numsCopy[i], numsCopy[j] = numsCopy[j], numsCopy[i]
 		}
+		MaskBits[n] = numsCopy
 	}
+
 	return true
 }
 
