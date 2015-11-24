@@ -51,6 +51,9 @@ func NewRandomBoard(difficulty int) Board {
 	seed := time.Now().UnixNano()
 	rng := rand.New(rand.NewSource(seed))
 
+	// restore MaskBits to its original value after we're done.
+	defer func(mbs [512][]uint8) { MaskBits = mbs }(MaskBits)
+
 	defer func(algos []Algorithm) { b.Algorithms = algos }(b.Algorithms)
 	b.Algorithms = append(b.Algorithms, &algoGenerateShuffle{rng})
 
