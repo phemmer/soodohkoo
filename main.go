@@ -101,10 +101,10 @@ func mainSolveStream(showStats bool) error {
 	for i := 0; i < workerCount; i++ {
 		wg.Add(1)
 		go func() {
-			for streamJob := range workerJobs {
-				buf := bytes.NewBuffer(streamJob.bs)
-				streamJob.bs, streamJob.err = mainSolveReader(buf, showStats)
-				streamJob.wg.Done()
+			for job := range workerJobs {
+				buf := bytes.NewBuffer(job.bs)
+				job.bs, job.err = mainSolveReader(buf, showStats)
+				job.wg.Done()
 			}
 			wg.Done()
 		}()
@@ -114,13 +114,13 @@ func mainSolveStream(showStats bool) error {
 	defer close(publisherJobs)
 	wg.Add(1)
 	go func() {
-		for streamJob := range publisherJobs {
-			streamJob.wg.Wait()
-			if streamJob.err != nil {
-				errChan <- streamJob.err
+		for job := range publisherJobs {
+			job.wg.Wait()
+			if job.err != nil {
+				errChan <- job.err
 				break
 			}
-			if _, err := os.Stdout.Write(streamJob.bs); err != nil {
+			if _, err := os.Stdout.Write(job.bs); err != nil {
 				errChan <- err
 				break
 			}
